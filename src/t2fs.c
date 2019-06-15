@@ -3,11 +3,27 @@
 */
 #include "t2fs.h"
 
+int tamanho_setor = 256;
+int tamanho_bloco = 0;
+unsigned char buffer_setor[tamanho_setor];
+
+typedef struct DIRENT2 Registro
+
+
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
 int identify2 (char *name, int size) {
-	return -1;
+	inicializaT2FS();
+
+	char *group = "Nomes e Numeros";
+	if(size < strlen(group)){
+		printf("faltou espaço\n");
+		return -1;
+	}
+	strncpy(name, group, strlen(group)+1);
+
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
@@ -16,7 +32,24 @@ Função:	Formata logicamente o disco virtual t2fs_disk.dat para o sistema de
 		corresponde a um múltiplo de setores dados por sectors_per_block.
 -----------------------------------------------------------------------------*/
 int format2 (int sectors_per_block) {
-	return -1;
+	tamanho_bloco = tamanho_setor * sectors_per_block;
+	
+	if(read_sector(0, buffer_setor) != 0){
+		printf("Erro: Falha ao ler setor 0!\n");
+		return -1;
+	}
+
+	 int inicioParticao =  *( (WORD*)(buffer_setor + 40) )
+	 int fimParticao = inicioParticao + 200 *tamanho_bloco;
+
+	 *WORD end_partition = *( (WORD*)(buffer_setor + 44) )
+
+	 *end_partition = (WORD*)fimParticao;
+
+	 write_sector(0,buffer_setor);
+
+
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
@@ -27,7 +60,24 @@ Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
 		assumirá um tamanho de zero bytes.
 -----------------------------------------------------------------------------*/
 FILE2 create2 (char *filename) {
-	return -1;
+	inicializaT2FS();
+    
+    Registro registro;
+
+    char nomeArquivo[MAX_FILE_NAME_SIZE + 1];
+
+    getLastDir(); // TODO
+
+    if (VerificaSeNomeJaExiste(filename) != 0)
+    {
+    	TrataNomesDuplicados(filename);
+    	
+    }
+    strncpy(registro.name,nomeArquivo);
+    registro.
+
+
+	return open2(filename);
 }
 
 /*-----------------------------------------------------------------------------
@@ -41,14 +91,40 @@ int delete2 (char *filename) {
 Função:	Função que abre um arquivo existente no disco.
 -----------------------------------------------------------------------------*/
 FILE2 open2 (char *filename) {
+	inicializaT2FS();
+	FILE2 freeHandle = getFreeFileHandle();
+	if(freeHandle == -1)
+		return -1;
+
+	Registro registro;
+	if(getRecordFromPath(filename,&registro) != 0)
+	{
+		return -1;
+	}
+
+	if(registro.fileType == ARQUIVO_REGULAR)
+	{
+		arquivos_abertos[freeHandle].registro = registro;
+		arquivos_abertos[freeHandle].currentPointer = 0;
+		return freeHandle;
+	}
+
 	return -1;
+
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para fechar um arquivo.
 -----------------------------------------------------------------------------*/
 int close2 (FILE2 handle) {
-	return -1;
+	inicializaT2FS();
+	if(fileHandValido(handle))
+	{
+		arquivos_abertos[hahdle].registro.fileType = INVALID_PTR;
+		return 0;
+	}
+
+	return -1; //FileHandleInvalido
 }
 
 /*-----------------------------------------------------------------------------
