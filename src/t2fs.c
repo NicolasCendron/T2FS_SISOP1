@@ -53,12 +53,12 @@ Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
 int identify2 (char *name, int size) {
 
-	char *group = "Nomes e Numeros";
-	if(size < strlen(group)){
+	char *grupo = "Diennifer P Vargas 00261612\nHenrique C Jordão 00230188\nNicolas C Fernandes 00230281\0";
+	if(size < strlen(grupo)){
 		printf("faltou espaço\n");
 		return -1;
 	}
-	strncpy(name, group, strlen(group)+1);
+	strncpy(name, grupo, strlen(grupo)+1);
 
 	return 0;
 }
