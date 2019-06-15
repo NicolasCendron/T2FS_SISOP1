@@ -2,19 +2,56 @@
 /**
 */
 #include "t2fs.h"
+#include "apidisk.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#define MAX_OPEN_FILES 200
+#define MAX_OPEN_DIRS 200
+#define TAMANHO_SETOR 256
 
-int tamanho_setor = 256;
+#define FALSE 0
+#define TRUE 1
+
+
+//typedef struct DIRENT2 Registro;
+
+typedef struct t2fs_openfile{
+	Registro registro;
+	DWORD currentPointer; // Em bytes a partir do inicio do arquivo!
+} OpenFile;
+
+
+
 int tamanho_bloco = 0;
-unsigned char buffer_setor[tamanho_setor];
+unsigned char buffer_setor[TAMANHO_SETOR];
 
-typedef struct DIRENT2 Registro
+int inicializado = FALSE;
+int bloco_atual = 0;
+char currentPath[200];
+
+OpenFile arquivos_abertos[MAX_OPEN_FILES];
+OpenFile diretorios_abertos[MAX_OPEN_DIRS];
 
 
+/* AUXILIARES */
+
+void inicializaT2FS();
+void inicializaArquivosAbertos();
+void inicializaDiretoriosAbertos();
+FILE2 getFreeFileHandle();
+FILE2 getFreeDirHandle();
+int isFileHandleValid(FILE2);
+int isDirHandleValid(DIR2);
+int VerificaSeNomeJaExiste(char*);
+void TrataNomesDuplicados(char*);
+int pegaRegistroPeloPath( char*,Registro*);
+int writeBytesOnFile();
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
 int identify2 (char *name, int size) {
-	inicializaT2FS();
 
 	char *group = "Nomes e Numeros";
 	if(size < strlen(group)){
@@ -32,22 +69,23 @@ Função:	Formata logicamente o disco virtual t2fs_disk.dat para o sistema de
 		corresponde a um múltiplo de setores dados por sectors_per_block.
 -----------------------------------------------------------------------------*/
 int format2 (int sectors_per_block) {
-	tamanho_bloco = tamanho_setor * sectors_per_block;
+	tamanho_bloco = TAMANHO_SETOR * sectors_per_block;
 	
+	/*	
 	if(read_sector(0, buffer_setor) != 0){
 		printf("Erro: Falha ao ler setor 0!\n");
 		return -1;
 	}
 
-	 int inicioParticao =  *( (WORD*)(buffer_setor + 40) )
+	*/
+	 int inicioParticao =  *( (WORD*)(buffer_setor + 40) );
 	 int fimParticao = inicioParticao + 200 *tamanho_bloco;
 
-	 *WORD end_partition = *( (WORD*)(buffer_setor + 44) )
+	// WORD end_partition = *( (WORD*)(buffer_setor + 44) );
 
-	 *end_partition = (WORD*)fimParticao;
+	// *end_partition = (WORD*) fimParticao;	
 
-	 write_sector(0,buffer_setor);
-
+	 //write_sector(0,buffer_setor);
 
 	return 0;
 }
@@ -66,15 +104,15 @@ FILE2 create2 (char *filename) {
 
     char nomeArquivo[MAX_FILE_NAME_SIZE + 1];
 
-    getLastDir(); // TODO
+   // getLastDir(); // TODO
 
     if (VerificaSeNomeJaExiste(filename) != 0)
     {
     	TrataNomesDuplicados(filename);
     	
     }
-    strncpy(registro.name,nomeArquivo);
-    registro.....
+    strcpy(registro.name,nomeArquivo);
+    //registro.....
 
 
 	return open2(filename);
@@ -97,7 +135,7 @@ FILE2 open2 (char *filename) {
 		return -1;
 
 	Registro registro;
-	if(getRecordFromPath(filename,&registro) != 0)
+	if(pegaRegistroPeloPath(filename,&registro) != 0)
 	{
 		return -1;
 	}
@@ -118,9 +156,9 @@ Função:	Função usada para fechar um arquivo.
 -----------------------------------------------------------------------------*/
 int close2 (FILE2 handle) {
 	inicializaT2FS();
-	if(fileHandValido(handle))
+	if(isFileHandleValid(handle))
 	{
-		arquivos_abertos[hahdle].registro.fileType = INVALID_PTR;
+		arquivos_abertos[handle].registro.fileType = INVALID_PTR;
 		return 0;
 	}
 
@@ -143,13 +181,13 @@ int write2 (FILE2 handle, char *buffer, int size) {
 	inicializaT2FS();
 
 	OpenFile file;
-	int numBytes;
+	int numBytes = 0;
 
 	if(isFileHandleValid(handle))
 	{
 		file = arquivos_abertos[handle];
 
-		if(writeBytesOnFile(file.currentPointer... ))
+		if(writeBytesOnFile())//file.currentPointer...))
 		{
 			file.currentPointer += numBytes;
 			arquivos_abertos[handle] = file;
@@ -185,7 +223,7 @@ int seek2 (FILE2 handle, DWORD offset) {
 			file.currentPointer = offset;
 		else 
 		{
-			file.currentPointer = registro.fileSize;
+			file.currentPointer = -1; //DUVIDA
 		}
 		arquivos_abertos[handle] = file;
 		return 0;
@@ -248,7 +286,7 @@ DIR2 opendir2 (char *pathname) {
 		return -1; // Deu problema
 	}
 
-	diretorios_abertos[freeHandle].record = record;
+	diretorios_abertos[freeHandle].registro = registro;
 	diretorios_abertos[freeHandle].currentPointer = 0;
 
 	return freeHandle;
@@ -273,7 +311,7 @@ int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 	}
 
 // Conctinua
-
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
@@ -282,11 +320,11 @@ Função:	Função usada para fechar um diretório.
 int closedir2 (DIR2 handle) {
 	inicializaT2FS();
 
-	if(!isDirHandleVakid(handle)){
+	if(!isDirHandleValid(handle)){
 		return -1;
 	}
 
-	diretorios_abertos[handle].record.fileType = INVALID_PTR;
+	diretorios_abertos[handle].registro.fileType = INVALID_PTR;
 
 	return 0;
 }
@@ -303,12 +341,6 @@ int ln2 (char *linkname, char *filename) {
 
 /* AUXILIARES */
 
-BOOL inicializado = FALSE;
-int bloco_atual = 0;
-char currentPath[200];
-
-#define MAX_OPEN_FILES = 200;
-#define MAX_OPEN_DIRS = 200;
 void inicializaT2FS()
 {
 	if(inicializado)
@@ -348,27 +380,49 @@ FILE2 getFreeFileHandle(){
 		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR);
 			return freeHandle;
 	}
+	return -1;
 }
 
-FILE2 getFreeDirHandle(){
+DIR2 getFreeDirHandle(){
 	DIR2 freeHandle;
 	for(freeHandle = 0; freeHandle < MAX_OPEN_DIRS; freeHandle++)
 	{
 		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR);
 			return freeHandle;
 	}
+	return -1;
 }
 
-BOOL isFileHandleValid(FILE2 handle){
-	if(handle < 0 || handle >= MAX_OPEN_FILES || arquivos_abertos[handle].record.fileType != ARQUIVO_REGULAR)
+int isFileHandleValid(FILE2 handle){
+	if(handle < 0 || handle >= MAX_OPEN_FILES || arquivos_abertos[handle].registro.fileType != ARQUIVO_REGULAR)
 		return FALSE;
 	else
 		return TRUE;
 }
 
-BOOL isDirHandleValid(DIR2 handle){
-	if(handle < 0 || handle >= MAX_OPEN_DIR || diretorios_abertos[handle].record.fileType != ARQUIVO_DIRETORIO)
+int isDirHandleValid(DIR2 handle){
+	if(handle < 0 || handle >= MAX_OPEN_DIRS || diretorios_abertos[handle].registro.fileType != ARQUIVO_DIRETORIO)
 		return FALSE;
 	else
 		return TRUE;
 }
+
+int VerificaSeNomeJaExiste(char* nome)
+{
+	return 0;
+}
+
+void TrataNomesDuplicados(char* nome)
+{
+	return;
+}
+
+int pegaRegistroPeloPath( char * pathname, Registro* registro)
+{
+	return 0;
+}
+
+int writeBytesOnFile(){
+	return 0;
+}
+
