@@ -301,3 +301,74 @@ int ln2 (char *linkname, char *filename) {
 }
 
 
+/* AUXILIARES */
+
+BOOL inicializado = FALSE;
+int bloco_atual = 0;
+char currentPath[200];
+
+#define MAX_OPEN_FILES = 200;
+#define MAX_OPEN_DIRS = 200;
+void inicializaT2FS()
+{
+	if(inicializado)
+		return;
+
+	inicializaArquivosAbertos();
+	inicializaDiretoriosAbertos();
+
+	bloco_atual = 0;
+	strcpy(currentPath, "/\0");
+
+	inicializado = TRUE;
+}
+
+void inicializaArquivosAbertos(){
+
+	int i;
+	for (i = 0; i < MAX_OPEN_FILES; i++)
+	{
+		arquivos_abertos[i].registro.fileType = INVALID_PTR;
+	}
+}
+
+void inicializaDiretoriosAbertos(){
+
+	int i;
+	for (i = 0; i < MAX_OPEN_DIRS; i++)
+	{
+		diretorios_abertos[i].registro.fileType = INVALID_PTR;
+	}
+}
+
+FILE2 getFreeFileHandle(){
+	FILE2 freeHandle;
+	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
+	{
+		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR);
+			return freeHandle;
+	}
+}
+
+FILE2 getFreeDirHandle(){
+	DIR2 freeHandle;
+	for(freeHandle = 0; freeHandle < MAX_OPEN_DIRS; freeHandle++)
+	{
+		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR);
+			return freeHandle;
+	}
+}
+
+BOOL isFileHandleValid(FILE2 handle){
+	if(handle < 0 || handle >= MAX_OPEN_FILES || arquivos_abertos[handle].record.fileType != ARQUIVO_REGULAR)
+		return FALSE;
+	else
+		return TRUE;
+}
+
+BOOL isDirHandleValid(DIR2 handle){
+	if(handle < 0 || handle >= MAX_OPEN_DIR || diretorios_abertos[handle].record.fileType != ARQUIVO_DIRETORIO)
+		return FALSE;
+	else
+		return TRUE;
+}
