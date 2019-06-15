@@ -74,7 +74,7 @@ FILE2 create2 (char *filename) {
     	
     }
     strncpy(registro.name,nomeArquivo);
-    registro.
+    registro.....
 
 
 	return open2(filename);
@@ -140,6 +140,23 @@ Função:	Função usada para realizar a escrita de uma certa quantidade
 		de bytes (size) de  um arquivo.
 -----------------------------------------------------------------------------*/
 int write2 (FILE2 handle, char *buffer, int size) {
+	inicializaT2FS();
+
+	OpenFile file;
+	int numBytes;
+
+	if(isFileHandleValid(handle))
+	{
+		file = arquivos_abertos[handle];
+
+		if(writeBytesOnFile(file.currentPointer... ))
+		{
+			file.currentPointer += numBytes;
+			arquivos_abertos[handle] = file;
+			return numBytes;
+		}
+		return -1;
+	}
 	return -1;
 }
 
@@ -156,6 +173,24 @@ int truncate2 (FILE2 handle) {
 Função:	Altera o contador de posição (current pointer) do arquivo.
 -----------------------------------------------------------------------------*/
 int seek2 (FILE2 handle, DWORD offset) {
+	inicializaT2FS();
+
+	OpenFile file;
+	
+	file = arquivos_abertos[handle];
+
+	if(file.registro.fileType == ARQUIVO_REGULAR)
+	{
+		if(offset != -1)
+			file.currentPointer = offset;
+		else 
+		{
+			file.currentPointer = registro.fileSize;
+		}
+		arquivos_abertos[handle] = file;
+		return 0;
+	}
+
 	return -1;
 }
 
@@ -184,28 +219,76 @@ int chdir2 (char *pathname) {
 Função:	Função usada para obter o caminho do diretório corrente.
 -----------------------------------------------------------------------------*/
 int getcwd2 (char *pathname, int size) {
-	return -1;
+	inicializaT2FS();
+
+	strncpy(pathname, currentPath, size);
+
+	if(strcmp(pathname, "/") != 0)
+	{
+		int len = strlen(pathname);
+		pathname[len - 1] = '\0';
+	}
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função que abre um diretório existente no disco.
 -----------------------------------------------------------------------------*/
 DIR2 opendir2 (char *pathname) {
-	return -1;
+	inicializaT2FS();
+
+	DIR2 freeHandle = getFreeDirHandle();
+	if(freeHandle == -1){
+		return -1; // Não tem handles disponiveis
+	}
+
+	Registro registro;
+	if(pegaRegistroPeloPath(pathname,&registro) != 0)
+	{
+		return -1; // Deu problema
+	}
+
+	diretorios_abertos[freeHandle].record = record;
+	diretorios_abertos[freeHandle].currentPointer = 0;
+
+	return freeHandle;
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para ler as entradas de um diretório.
 -----------------------------------------------------------------------------*/
 int readdir2 (DIR2 handle, DIRENT2 *dentry) {
-	return -1;
+	Registro registro;
+
+	if(!isDirHandleValid(handle))
+	{
+		return -1;
+	}
+
+	arquivos_abertos[handle].currentPointer++;
+
+	if(registro.fileType == INVALID_PTR)
+	{
+		return readdir2(handle, dentry);
+	}
+
+// Conctinua
+
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para fechar um diretório.
 -----------------------------------------------------------------------------*/
 int closedir2 (DIR2 handle) {
-	return -1;
+	inicializaT2FS();
+
+	if(!isDirHandleVakid(handle)){
+		return -1;
+	}
+
+	diretorios_abertos[handle].record.fileType = INVALID_PTR;
+
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
