@@ -15,14 +15,15 @@ INC_DIR=./include
 BIN_DIR=./bin
 SRC_DIR=./src
 
-LIB=$(LIB_DIR)/libt2fs.a
+OBJS=lib/apidisk.o  bin/t2fs.o 
 
-all: $(BIN_DIR)/t2fs.o
-	ar -crs $(LIB) $^ $(LIB_DIR)/apidisk.o
+all: bin/t2fs.o 
+			ar crs lib/libt2fs.a $(OBJS)
 
 
-$(BIN_DIR)/t2fs.o: $(SRC_DIR)/t2fs.c
-	$(CC) -o $@ $< -I$(INC_DIR) $(CFLAGS)
+bin/t2fs.o: src/t2fs.c #dependencies
+			 gcc -c src/t2fs.c -o bin/t2fs.o -Wall
+
 
 tar:
 	@cd .. && tar -zcvf 274693.tar.gz t2fs

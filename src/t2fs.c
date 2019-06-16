@@ -1,8 +1,9 @@
 
 /**
 */
-#include "t2fs.h"
-#include "apidisk.h"
+
+#include "../include/t2fs.h"
+#include "../include/apidisk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -377,7 +378,7 @@ FILE2 getFreeFileHandle(){
 	FILE2 freeHandle;
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
-		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR);
+		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR)
 			return freeHandle;
 	}
 	return -1;
@@ -387,7 +388,7 @@ DIR2 getFreeDirHandle(){
 	DIR2 freeHandle;
 	for(freeHandle = 0; freeHandle < MAX_OPEN_DIRS; freeHandle++)
 	{
-		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR);
+		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR)
 			return freeHandle;
 	}
 	return -1;
