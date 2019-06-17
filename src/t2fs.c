@@ -14,22 +14,67 @@
 
 #define FALSE 0
 #define TRUE 1
+#define atoa(x) #x
 
 
-//typedef struct DIRENT2 Registro;
+//DIRENT2 : Descritor
+
+//typedef struct {
+//    char    name[MAX_FILE_NAME_SIZE+1]; /* Nome do arquivo cuja entrada foi lida do disco      */
+//    BYTE    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
+//    DWORD   fileSize;                  /* Numero de bytes do arquivo */
+//} DIRENT2;
+
+
+//Registro : Diretorio ou Arquivo
+//typedef struct {
+//    char    name[MAX_FILE_NAME_SIZE+1]; /* Nome do arquivo cuja entrada foi lida do disco      */
+//    DWORD	blocoInicial;
+//    DWORD	numeroDeBlocos;
+//    char path[1000];
+//} Registro;
+
+//Arvore de Registros
+
+typedef struct NODO {
+	Registro registro;
+	struct NODO *proxIrmao;
+	struct NODO *primeiroFilho;
+	struct NODO *pai;
+}Nodo_Registros;
+
+Nodo_Registros *arvore_registros;
+
+//Arquivos / Diretorios Abertos
 
 typedef struct t2fs_openfile{
 	Registro registro;
 	DWORD currentPointer; // Em bytes a partir do inicio do arquivo!
 } OpenFile;
 
+//Super Bloco
+/** Superbloco */
+struct t2fs_superbloco {
+	char    id[4];          
+	WORD    version;        		
+	WORD    tamanho_vetor_blocos; 		
+	WORD    tamanho_bloco;	
+	WORD    setores_por_bloco;	
+	WORD    max_blocos;		
+	};
+typedef struct t2fs_superbloco SuperBloco;
+
+SuperBloco superBlock;
 
 
 int tamanho_bloco = 0;
+int inicio_escrita_blocos = 0;
+int ultimo_bloco_escrito = 0;
+
 unsigned char buffer_setor[TAMANHO_SETOR];
 
 int inicializado = FALSE;
-int bloco_atual = 0;
+
 char currentPath[200];
 
 OpenFile arquivos_abertos[MAX_OPEN_FILES];
@@ -49,6 +94,8 @@ int VerificaSeNomeJaExiste(char*);
 void TrataNomesDuplicados(char*);
 int pegaRegistroPeloPath( char*,Registro*);
 int writeBytesOnFile();
+void writeBlock(int, char*);
+int readSuperBlock();
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
@@ -70,24 +117,35 @@ Função:	Formata logicamente o disco virtual t2fs_disk.dat para o sistema de
 		corresponde a um múltiplo de setores dados por sectors_per_block.
 -----------------------------------------------------------------------------*/
 int format2 (int sectors_per_block) {
-	tamanho_bloco = TAMANHO_SETOR * sectors_per_block;
+	tamanho_bloco = sectors_per_block;
 	
-	/*	
-	if(read_sector(0, buffer_setor) != 0){
-		printf("Erro: Falha ao ler setor 0!\n");
+	int MAX_BLOCOS = 2000;
+	char *strTamanhoBloco = atoa(tamanho_bloco);
+	char *strMaxBlocos = "2000";
+	char *strTamanhoVetorBlocos = "2000";
+
+	char buffer[SECTOR_SIZE]= {'T'};
+	strcat((char*)buffer,"2FS"); // Sistema
+	strcat((char*)buffer,"1"); // tamanho do Superbloco
+
+	strcat((char*)buffer,"2000"); //Tamanho vetor bits
+
+	strcat((char*)buffer, "2"); //Setores por bloco / Blocksize		
+	strcat((char*)buffer,"10000"); //Quantidade total de blocos	
+
+	
+	int cont = 0;
+	for (cont = 0; cont < SECTOR_SIZE; cont++)
+	{
+		//printf("%c",buffer[cont]);
+	}
+
+	if(write_sector(sector, auxBuffer) != 0)
+	{
 		return -1;
 	}
 
-	*/
-	 int inicioParticao =  *( (WORD*)(buffer_setor + 40) );
-	 int fimParticao = inicioParticao + 200 *tamanho_bloco;
-
-	// WORD end_partition = *( (WORD*)(buffer_setor + 44) );
-
-	// *end_partition = (WORD*) fimParticao;	
-
-	 //write_sector(0,buffer_setor);
-
+	//writeBlock(0,buffer);
 	return 0;
 }
 
@@ -109,11 +167,13 @@ FILE2 create2 (char *filename) {
 
     if (VerificaSeNomeJaExiste(filename) != 0)
     {
-    	TrataNomesDuplicados(filename);
-    	
+    	TrataNomesDuplicados(filename);    	
     }
     strcpy(registro.name,nomeArquivo);
     //registro.....
+    registro.fileType = ARQUIVO_REGULAR;
+
+    //writeBlock()
 
 
 	return open2(filename);
@@ -138,7 +198,7 @@ FILE2 open2 (char *filename) {
 	Registro registro;
 	if(pegaRegistroPeloPath(filename,&registro) != 0)
 	{
-		return -1;
+		return -2;
 	}
 
 	if(registro.fileType == ARQUIVO_REGULAR)
@@ -148,7 +208,7 @@ FILE2 open2 (char *filename) {
 		return freeHandle;
 	}
 
-	return -1;
+	return -3;
 
 }
 
@@ -196,7 +256,7 @@ int write2 (FILE2 handle, char *buffer, int size) {
 		}
 		return -1;
 	}
-	return -1;
+	return -2;
 }
 
 /*-----------------------------------------------------------------------------
@@ -230,13 +290,25 @@ int seek2 (FILE2 handle, DWORD offset) {
 		return 0;
 	}
 
-	return -1;
+	return -2;
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para criar um novo diretório.
 -----------------------------------------------------------------------------*/
 int mkdir2 (char *pathname) {
+	
+	//char* currentPath;
+	//Registro novoRegistro = malloc(sizeof(Registro));
+	//novoRegistro->nome = isolaNameDoPath(pathname);
+
+
+
+
+
+
+
+
 	return -1;
 }
 
@@ -284,7 +356,7 @@ DIR2 opendir2 (char *pathname) {
 	Registro registro;
 	if(pegaRegistroPeloPath(pathname,&registro) != 0)
 	{
-		return -1; // Deu problema
+		return -2; // Deu problema
 	}
 
 	diretorios_abertos[freeHandle].registro = registro;
@@ -347,14 +419,44 @@ void inicializaT2FS()
 	if(inicializado)
 		return;
 
+	readSuperBlock();
+
+
 	inicializaArquivosAbertos();
 	inicializaDiretoriosAbertos();
 
-	bloco_atual = 0;
+	ultimo_bloco_escrito = 2000; //--> Buscar do Bitmap
+	
 	strcpy(currentPath, "/\0");
+
+	 //arvore_registros =  malloc (sizeof (Nodo_Registros));
+	 //arvore_registros -> registro = malloc (sizeof (Registro));	 
+	 //arvore_registros -> registro -> path = "/";
+	 //arvore_registros -> registro -> path = "/";
 
 	inicializado = TRUE;
 }
+
+
+int readSuperBlock(){
+
+	unsigned char buffer[SECTOR_SIZE];
+
+	if(read_sector(0, buffer) != 0){
+		printf("Error: Failed reading sector 0!\n");
+		return -1;
+	}
+
+	strncpy(superBlock.id, (char*)buffer, 4);
+	superBlock.tamanho_vetor_blocos = *( (WORD*)(buffer + 4) ); 
+	superBlock.tamanho_bloco = *( (WORD*)(buffer + 6) );
+	superBlock.setores_por_bloco = *( (WORD*)(buffer + 8) );
+	superBlock.max_blocos = *( (WORD*)(buffer + 10) );
+	
+	return 0;
+
+}
+
 
 void inicializaArquivosAbertos(){
 
@@ -376,12 +478,13 @@ void inicializaDiretoriosAbertos(){
 
 FILE2 getFreeFileHandle(){
 	FILE2 freeHandle;
+	printf("Entrou no FileHandle\n");
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
 		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR)
 			return freeHandle;
 	}
-	return -1;
+	return -2;
 }
 
 DIR2 getFreeDirHandle(){
@@ -391,7 +494,7 @@ DIR2 getFreeDirHandle(){
 		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR)
 			return freeHandle;
 	}
-	return -1;
+	return -2;
 }
 
 int isFileHandleValid(FILE2 handle){
@@ -420,6 +523,10 @@ void TrataNomesDuplicados(char* nome)
 
 int pegaRegistroPeloPath( char * pathname, Registro* registro)
 {
+	char filename[MAX_FILE_NAME_SIZE+1];
+	int number;
+
+
 	return 0;
 }
 
@@ -427,3 +534,21 @@ int writeBytesOnFile(){
 	return 0;
 }
 
+void writeBlock(int blockNumber, char *buffer){
+	unsigned char auxBuffer[SECTOR_SIZE];
+	int sector = blockNumber*tamanho_bloco;
+	int sectors = 0;
+	int i, currentByte=0;
+	
+while(sectors < tamanho_bloco ){
+		for(i = 0; i< SECTOR_SIZE; i++){
+			auxBuffer[i] = buffer[currentByte];
+			currentByte++;
+		}
+		if(write_sector(sector, auxBuffer) == 0){
+			sector++;
+			sectors++;
+		}
+	}
+
+}
