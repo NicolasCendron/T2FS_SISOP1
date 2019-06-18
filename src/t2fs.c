@@ -14,7 +14,7 @@
 
 #define FALSE 0
 #define TRUE 1
-#define atoa(x) #x
+
 
 
 //DIRENT2 : Descritor
@@ -47,17 +47,14 @@ typedef struct t2fs_openfile{
 
 //Super Bloco
 /** Superbloco */
-struct t2fs_superbloco {
-	char    id[4];          
-	WORD    version;        		
-	WORD    tamanho_vetor_blocos; 		
-	WORD    tamanho_bloco;	
-	WORD    setores_por_bloco;	
-	WORD    max_blocos;		
+struct informacoes_disco{       		
+	DWORD    NUMERO_DE_BLOCOS; 		
+	DWORD    SETORES_POR_BLOCO;	
+	DWORD    NUMERO_DE_SETORES;		
 	};
-typedef struct t2fs_superbloco SuperBloco;
+typedef struct informacoes_disco INFO_DISCO;
 
-SuperBloco superBlock;
+INFO_DISCO CONTROLE;
 
 
 int tamanho_bloco = 0;
@@ -87,7 +84,9 @@ int VerificaSeNomeJaExiste(char*);
 int VerificaSeRegistroExiste(char*,BYTE);
 void TrataNomesDuplicados(char*);
 void writeBlock(int, char*);
-int readSuperBlock();
+int PegaInformacoesDoDisco();
+void limpa_buffer( unsigned char buffer[]);
+int ApagaRegistroPeloNome( char *, int);
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
@@ -110,36 +109,60 @@ Função:	Formata logicamente o disco virtual t2fs_disk.dat para o sistema de
 -----------------------------------------------------------------------------*/
 int format2 (int sectors_per_block) {
 	tamanho_bloco = sectors_per_block;
+	unsigned char buffer[SECTOR_SIZE] = {0};
+
+	//Coloca no Setor 0 --> MAXIMO DE BLOCOS
 	
-	int MAX_BLOCOS = 2000;
-	char *strTamanhoBloco = atoa(tamanho_bloco);
-	char *strMaxBlocos = "2000";
-	char *strTamanhoVetorBlocos = "2000";
-
-	char buffer[SECTOR_SIZE]= {'T'};
-	strcat((char*)buffer,"2FS"); // Sistema
-	strcat((char*)buffer,"1"); // tamanho do Superbloco
-
-	strcat((char*)buffer,"2000"); //Tamanho vetor bits
-
-	strcat((char*)buffer, "2"); //Setores por bloco / Blocksize		
-	strcat((char*)buffer,"10000"); //Quantidade total de blocos	
-
+	int MAX_BLOCOS = 500; // Serão Sempre 500 blocos
 	
-	int cont = 0;
-	for (cont = 0; cont < SECTOR_SIZE; cont++)
-	{
-		//printf("%c",buffer[cont]);
-	}
-
+	sprintf ((char *)buffer, "%i",MAX_BLOCOS);
 	if(write_sector(0, buffer) != 0)
 	{
 		return -1;
 	}
 
-	//writeBlock(0,buffer);
+	// Coloca no Setor 1 --> Setores Por Bloco (MAX 8)
+	limpa_buffer(buffer);
+	
+	sprintf ((char *)buffer, "%i",sectors_per_block);
+	if(write_sector(1, buffer) != 0)
+	{
+		return -1;
+	}
+
+	// Coloca no Setor 2 --> Total de Setores (Max 4000)
+	limpa_buffer(buffer);
+	sprintf ((char *)buffer, "%i",sectors_per_block* MAX_BLOCOS);
+	
+	if(write_sector(2, buffer) != 0)
+	{
+		return -1;
+	}
+
+	// Falta ainda colocar a lista de Registros;
+
+	// Falta ainda colocar o vetor de bits;
+
+
+	// Esvazia o resto do disco; Se adicionar mais coisas atualize o inicio do I
+	
+	int i = 3;
+	for (i = 3; i < sectors_per_block* MAX_BLOCOS; i++)
+	{
+		limpa_buffer(buffer);
+		if(write_sector(i, buffer) != 0)
+		{
+			return -1;
+		}
+		
+	}  
+	
+
+	inicializado = FALSE;
 	return 0;
 }
+
+
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
@@ -156,8 +179,6 @@ FILE2 create2 (char *filename) {
     	printf("%s\n","Esse nome já existe");
     	return -1;  	
     }
-	printf("%s",filename);
-    
    
     strncpy(lista_registros[index_registros].name,filename,MAX_FILE_NAME_SIZE - 1);
     printf("O nome é: %s", lista_registros[index_registros].name);
@@ -376,8 +397,6 @@ Função:	Função usada para ler as entradas de um diretório.
 -----------------------------------------------------------------------------*/
 int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 
-	//displayFiles();
-
 // Conctinua
 	return 0;
 }
@@ -414,7 +433,7 @@ void inicializaT2FS()
 	if(inicializado)
 		return;
 
-	//readSuperBlock();
+	PegaInformacoesDoDisco();
 
 	int i;
 	for (i = 0; i < 200; i++){
@@ -434,21 +453,50 @@ void inicializaT2FS()
 }
 
 
-int readSuperBlock(){
+int PegaInformacoesDoDisco(){
 
-	unsigned char buffer[SECTOR_SIZE];
+
+	unsigned char buffer[SECTOR_SIZE] = {0};
+
+	//Carrega a INFO do NUMERO_TOTAL_DE_BLOCOS	
+
+	limpa_buffer(buffer);
 
 	if(read_sector(0, buffer) != 0){
 		printf("Error: Failed reading sector 0!\n");
 		return -1;
 	}
 
-	strncpy(superBlock.id, (char*)buffer, 4);
-	superBlock.tamanho_vetor_blocos = *( (WORD*)(buffer + 4) ); 
-	superBlock.tamanho_bloco = *( (WORD*)(buffer + 6) );
-	superBlock.setores_por_bloco = *( (WORD*)(buffer + 8) );
-	superBlock.max_blocos = *( (WORD*)(buffer + 10) );
+	sscanf((char *)buffer, "%u", &CONTROLE.NUMERO_DE_BLOCOS);	
+
 	
+	//Carrega a INFO do NUMERO de SETORES_POR_BLOCO
+
+	limpa_buffer(buffer);
+
+	if(read_sector(1, buffer) != 0){
+		printf("Error: Failed reading sector 1!\n");
+		return -1;
+	}
+	
+	sscanf((char *)buffer, "%u", &CONTROLE.SETORES_POR_BLOCO);
+
+	//Carrega a INFO do NUMERO de SETORES
+
+
+	limpa_buffer(buffer);
+
+	if(read_sector(2, buffer) != 0){
+		printf("Error: Failed reading sector 2!\n");
+		return -1;
+	}
+
+	sscanf((char *)buffer, "%u", &CONTROLE.NUMERO_DE_SETORES);
+	
+	printf("\n%u",CONTROLE.NUMERO_DE_BLOCOS);
+	printf("\n%u",CONTROLE.SETORES_POR_BLOCO);
+	printf("\n%u\n",CONTROLE.NUMERO_DE_SETORES);
+
 	return 0;
 
 }
@@ -556,27 +604,25 @@ void writeBlock(int blockNumber, char *buffer){
 	int sectors = 0;
 	int i, currentByte=0;
 	
-while(sectors < tamanho_bloco ){
-		for(i = 0; i< SECTOR_SIZE; i++){
-			auxBuffer[i] = buffer[currentByte];
-			currentByte++;
+	while(sectors < tamanho_bloco ){
+			for(i = 0; i< SECTOR_SIZE; i++){
+				auxBuffer[i] = buffer[currentByte];
+				currentByte++;
+			}
+			if(write_sector(sector, auxBuffer) == 0){
+				sector++;
+				sectors++;
+			}
 		}
-		if(write_sector(sector, auxBuffer) == 0){
-			sector++;
-			sectors++;
-		}
-	}
 
 }
 
-void displayFiles(){
-	int i;
-	printf("Files in disk:\n");
-	printf("Name\tStart\tLength\n");
-	for (i = 0; i < index_registros; i++){
-		if ( strcmp(lista_registros[i].name,"") == 0){
-			printf("%s\t%4d\t%3d\n", lista_registros[i].name, lista_registros[i].blocoInicial, lista_registros[i].numeroDeBlocos);
-		}
+
+void limpa_buffer( unsigned char buffer[])
+{
+	int i = 0;
+	for (i = 0; i < TAMANHO_SETOR; i++)
+	{
+		buffer[i] = 0;
 	}
-	printf("\n");
 }
