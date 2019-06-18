@@ -84,6 +84,7 @@ FILE2 getFreeDirHandle();
 int isFileHandleValid(FILE2);
 int isDirHandleValid(DIR2);
 int VerificaSeNomeJaExiste(char*);
+int VerificaSeRegistroExiste(char*,BYTE);
 void TrataNomesDuplicados(char*);
 void writeBlock(int, char*);
 int readSuperBlock();
@@ -148,9 +149,7 @@ Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
 		assumirá um tamanho de zero bytes.
 -----------------------------------------------------------------------------*/
 FILE2 create2 (char *filename) {
-	inicializaT2FS();
-    
-    Registro registro;
+    inicializaT2FS();
 
     if (VerificaSeNomeJaExiste(filename) != 0)
     {
@@ -160,7 +159,8 @@ FILE2 create2 (char *filename) {
 	printf("%s",filename);
     
    
-   // strcpy(lista_registros[index_registros].name,filename);
+    strncpy(lista_registros[index_registros].name,filename,MAX_FILE_NAME_SIZE - 1);
+    printf("O nome é: %s", lista_registros[index_registros].name);
     lista_registros[index_registros].fileType = ARQUIVO_REGULAR;
     lista_registros[index_registros].blocoInicial = index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
@@ -181,11 +181,17 @@ Função:	Função usada para remover (apagar) um arquivo do disco.
 -----------------------------------------------------------------------------*/
 int delete2 (char *filename) {
 
-	//Procura o arquivo
-	//Apaga o arquivo
+	Registro regDeletado;
+	regDeletado.name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
+
+	strncpy(regDeletado.name,filename,MAX_FILE_NAME_SIZE - 1);
+ 
+	int encontrou =ApagaRegistroPeloNome(filename,ARQUIVO_REGULAR);
+	
+	//Apaga o arquivo	
 	//Atualiza Vetor de bits
 
-	return -1;
+	return encontrou;
 }
 
 /*-----------------------------------------------------------------------------
@@ -281,12 +287,31 @@ int seek2 (FILE2 handle, DWORD offset) {
 Função:	Função usada para criar um novo diretório.
 -----------------------------------------------------------------------------*/
 int mkdir2 (char *pathname) {
-	
-	//char* currentPath;
-	//Registro novoRegistro = malloc(sizeof(Registro));
-	//novoRegistro->nome = isolaNameDoPath(pathname);
+	inicializaT2FS();
+    
+
+    if (VerificaSeNomeJaExiste(pathname) != 0)
+    {
+    	printf("%s\n","Esse nome já existe");
+    	return -1;  	
+    }
+	printf("%s",pathname);
+    
+   
+    strncpy(lista_registros[index_registros].name,pathname,50);
+    lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
+    lista_registros[index_registros].blocoInicial = index_registros;
+    lista_registros[index_registros].numeroDeBlocos = 1;
+    index_registros++;
+
+  
+    //Tem que colocar o diretorio num bloco de disco
+    //Tem que Atualizar o Vetor de Bits
+
+    //writeBlock()
 
 
+	return 0;
 
 
 
@@ -350,7 +375,6 @@ DIR2 opendir2 (char *pathname) {
 Função:	Função usada para ler as entradas de um diretório.
 -----------------------------------------------------------------------------*/
 int readdir2 (DIR2 handle, DIRENT2 *dentry) {
-	Registro registro;
 
 	//displayFiles();
 
@@ -394,8 +418,8 @@ void inicializaT2FS()
 
 	int i;
 	for (i = 0; i < 200; i++){
-		lista_registros[i].name = malloc(50);
-		lista_registros[i].name = "";
+		lista_registros[i].name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
+		lista_registros[i].fileType = INVALID_PTR;
 	}
 
 
@@ -450,7 +474,6 @@ void inicializaDiretoriosAbertos(){
 
 FILE2 getFreeFileHandle(){
 	FILE2 freeHandle;
-	printf("Entrou no FileHandle\n");
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
 		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR)
@@ -485,16 +508,44 @@ int isDirHandleValid(DIR2 handle){
 }
 
 int VerificaSeNomeJaExiste(char* nome)
-{
+
+{	int cont = 0;
+	for(cont = 0; cont < index_registros; cont++)
+	{
+		if(lista_registros[cont].name != NULL &&  strcmp(lista_registros[cont].name, nome) == 0)
+		{
+		   return -1;
+		}
+	}
+
 	return 0;
 }
 
-int pegaRegistroPeloNome( char * pathname, Registro* registro)
+
+int VerificaSeRegistroExiste(char* nome, BYTE tipo)
 {
-	char filename[MAX_FILE_NAME_SIZE+1];
-	int number;
+	int cont = 0;
+	printf("index: %d",index_registros);
+	for(cont = 0; cont < index_registros; cont++)
+	{
+		printf("%s",lista_registros[cont].name);		
+		if(lista_registros[cont].name != NULL && strcmp(lista_registros[cont].name, nome) == 0 && lista_registros[cont].fileType == tipo)
+		{
+		   return cont;
+		}
+	}
+	printf("Não Foi Encontrado Registro com esse nome");
+	return -1;
+}
 
-
+int ApagaRegistroPeloNome( char * pathname, int tipo)
+{
+	int indice = VerificaSeRegistroExiste(pathname,tipo);
+	if(indice < 0)
+	{
+		return -1;
+	}
+	lista_registros[indice].fileType = INVALID_PTR; 
 	return 0;
 }
 
