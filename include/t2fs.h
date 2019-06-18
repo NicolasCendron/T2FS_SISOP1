@@ -27,14 +27,6 @@ typedef struct {
     DWORD   fileSize;                  /* Numero de bytes do arquivo */
 } DIRENT2;
 
-typedef struct {
-    char    name[MAX_FILE_NAME_SIZE+1]; /* Nome do arquivo cuja entrada foi lida do disco      */
-    BYTE    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
-    DWORD   fileSize;                  /* Numero de bytes do arquivo */
-    DWORD	blocoInicial;
-    DWORD	numeroDeBlocos;
-} Registro;
-
 #pragma pack(pop)
 
 

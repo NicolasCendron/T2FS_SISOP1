@@ -26,25 +26,18 @@
 //} DIRENT2;
 
 
-//Registro : Diretorio ou Arquivo
-//typedef struct {
-//    char    name[MAX_FILE_NAME_SIZE+1]; /* Nome do arquivo cuja entrada foi lida do disco      */
-//    DWORD	blocoInicial;
-//    DWORD	numeroDeBlocos;
-//    char path[1000];
-//} Registro;
 
-//Arvore de Registros
+typedef struct {
+    char*    name; /* Nome do arquivo cuja entrada foi lida do disco      */
+    BYTE    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
+	DWORD   fileSize; 
+    DWORD	blocoInicial;
+    DWORD	numeroDeBlocos;
+} Registro;
 
-typedef struct NODO {
-	Registro registro;
-	struct NODO *proxIrmao;
-	struct NODO *primeiroFilho;
-	struct NODO *pai;
-}Nodo_Registros;
 
-Nodo_Registros *arvore_registros;
-
+Registro lista_registros[200];
+int index_registros = 0;
 //Arquivos / Diretorios Abertos
 
 typedef struct t2fs_openfile{
@@ -92,8 +85,6 @@ int isFileHandleValid(FILE2);
 int isDirHandleValid(DIR2);
 int VerificaSeNomeJaExiste(char*);
 void TrataNomesDuplicados(char*);
-int pegaRegistroPeloPath( char*,Registro*);
-int writeBytesOnFile();
 void writeBlock(int, char*);
 int readSuperBlock();
 /*-----------------------------------------------------------------------------
@@ -140,7 +131,7 @@ int format2 (int sectors_per_block) {
 		//printf("%c",buffer[cont]);
 	}
 
-	if(write_sector(sector, auxBuffer) != 0)
+	if(write_sector(0, buffer) != 0)
 	{
 		return -1;
 	}
@@ -161,28 +152,39 @@ FILE2 create2 (char *filename) {
     
     Registro registro;
 
-    char nomeArquivo[MAX_FILE_NAME_SIZE + 1];
-
-   // getLastDir(); // TODO
-
     if (VerificaSeNomeJaExiste(filename) != 0)
     {
-    	TrataNomesDuplicados(filename);    	
+    	printf("%s\n","Esse nome já existe");
+    	return -1;  	
     }
-    strcpy(registro.name,nomeArquivo);
-    //registro.....
-    registro.fileType = ARQUIVO_REGULAR;
+	printf("%s",filename);
+    
+   
+   // strcpy(lista_registros[index_registros].name,filename);
+    lista_registros[index_registros].fileType = ARQUIVO_REGULAR;
+    lista_registros[index_registros].blocoInicial = index_registros;
+    lista_registros[index_registros].numeroDeBlocos = 1;
+    index_registros++;
+
+  
+    //Tem que colocar o arquivo num bloco de disco
+    //Tem que Atualizar o Vetor de Bits
 
     //writeBlock()
 
 
-	return open2(filename);
+	return 0;
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para remover (apagar) um arquivo do disco. 
 -----------------------------------------------------------------------------*/
 int delete2 (char *filename) {
+
+	//Procura o arquivo
+	//Apaga o arquivo
+	//Atualiza Vetor de bits
+
 	return -1;
 }
 
@@ -196,10 +198,6 @@ FILE2 open2 (char *filename) {
 		return -1;
 
 	Registro registro;
-	if(pegaRegistroPeloPath(filename,&registro) != 0)
-	{
-		return -2;
-	}
 
 	if(registro.fileType == ARQUIVO_REGULAR)
 	{
@@ -241,21 +239,7 @@ Função:	Função usada para realizar a escrita de uma certa quantidade
 int write2 (FILE2 handle, char *buffer, int size) {
 	inicializaT2FS();
 
-	OpenFile file;
-	int numBytes = 0;
-
-	if(isFileHandleValid(handle))
-	{
-		file = arquivos_abertos[handle];
-
-		if(writeBytesOnFile())//file.currentPointer...))
-		{
-			file.currentPointer += numBytes;
-			arquivos_abertos[handle] = file;
-			return numBytes;
-		}
-		return -1;
-	}
+		
 	return -2;
 }
 
@@ -346,6 +330,7 @@ int getcwd2 (char *pathname, int size) {
 Função:	Função que abre um diretório existente no disco.
 -----------------------------------------------------------------------------*/
 DIR2 opendir2 (char *pathname) {
+	
 	inicializaT2FS();
 
 	DIR2 freeHandle = getFreeDirHandle();
@@ -354,11 +339,7 @@ DIR2 opendir2 (char *pathname) {
 	}
 
 	Registro registro;
-	if(pegaRegistroPeloPath(pathname,&registro) != 0)
-	{
-		return -2; // Deu problema
-	}
-
+	
 	diretorios_abertos[freeHandle].registro = registro;
 	diretorios_abertos[freeHandle].currentPointer = 0;
 
@@ -371,17 +352,7 @@ Função:	Função usada para ler as entradas de um diretório.
 int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 	Registro registro;
 
-	if(!isDirHandleValid(handle))
-	{
-		return -1;
-	}
-
-	arquivos_abertos[handle].currentPointer++;
-
-	if(registro.fileType == INVALID_PTR)
-	{
-		return readdir2(handle, dentry);
-	}
+	//displayFiles();
 
 // Conctinua
 	return 0;
@@ -419,7 +390,13 @@ void inicializaT2FS()
 	if(inicializado)
 		return;
 
-	readSuperBlock();
+	//readSuperBlock();
+
+	int i;
+	for (i = 0; i < 200; i++){
+		lista_registros[i].name = malloc(50);
+		lista_registros[i].name = "";
+	}
 
 
 	inicializaArquivosAbertos();
@@ -428,11 +405,6 @@ void inicializaT2FS()
 	ultimo_bloco_escrito = 2000; //--> Buscar do Bitmap
 	
 	strcpy(currentPath, "/\0");
-
-	 //arvore_registros =  malloc (sizeof (Nodo_Registros));
-	 //arvore_registros -> registro = malloc (sizeof (Registro));	 
-	 //arvore_registros -> registro -> path = "/";
-	 //arvore_registros -> registro -> path = "/";
 
 	inicializado = TRUE;
 }
@@ -494,7 +466,8 @@ DIR2 getFreeDirHandle(){
 		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR)
 			return freeHandle;
 	}
-	return -2;
+	//return -2;
+	return 0;
 }
 
 int isFileHandleValid(FILE2 handle){
@@ -516,12 +489,7 @@ int VerificaSeNomeJaExiste(char* nome)
 	return 0;
 }
 
-void TrataNomesDuplicados(char* nome)
-{
-	return;
-}
-
-int pegaRegistroPeloPath( char * pathname, Registro* registro)
+int pegaRegistroPeloNome( char * pathname, Registro* registro)
 {
 	char filename[MAX_FILE_NAME_SIZE+1];
 	int number;
@@ -530,9 +498,6 @@ int pegaRegistroPeloPath( char * pathname, Registro* registro)
 	return 0;
 }
 
-int writeBytesOnFile(){
-	return 0;
-}
 
 void writeBlock(int blockNumber, char *buffer){
 	unsigned char auxBuffer[SECTOR_SIZE];
@@ -551,4 +516,16 @@ while(sectors < tamanho_bloco ){
 		}
 	}
 
+}
+
+void displayFiles(){
+	int i;
+	printf("Files in disk:\n");
+	printf("Name\tStart\tLength\n");
+	for (i = 0; i < index_registros; i++){
+		if ( strcmp(lista_registros[i].name,"") == 0){
+			printf("%s\t%4d\t%3d\n", lista_registros[i].name, lista_registros[i].blocoInicial, lista_registros[i].numeroDeBlocos);
+		}
+	}
+	printf("\n");
 }
