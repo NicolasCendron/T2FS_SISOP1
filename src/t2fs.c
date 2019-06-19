@@ -39,12 +39,6 @@ typedef struct reg {
     DWORD   filhos[MAX_FILHOS];
 } Registro;
 
-Registro lista_registros[MAX_BLOCOS]; // Lista de Todos os Registros conhecidos
-
-
-char currentPath[MAX_FILE_NAME_SIZE+1];
-
-int index_registros = 0;
 //Arquivos / Diretorios Abertos
 
 typedef struct t2fs_openfile{
@@ -59,11 +53,24 @@ struct informacoes_disco{
 	};
 typedef struct informacoes_disco INFO_DISCO;
 
+
+
+/* GLOBAIS */
+
+int opendir_relativo = FALSE;
+
+Registro lista_registros[MAX_BLOCOS]; // Lista de Todos os Registros conhecidos
+
+char currentPath[MAX_FILE_NAME_SIZE+1];
+
+int index_registros = 0;
+
 INFO_DISCO CONTROLE;
 
-
 int tamanho_bloco = 0;
+
 int inicio_escrita_blocos = 0;
+
 int ultimo_bloco_escrito = 0;
 
 unsigned char buffer_setor[TAMANHO_SETOR];
@@ -71,8 +78,8 @@ unsigned char buffer_setor[TAMANHO_SETOR];
 int inicializado = FALSE;
 
 OpenFile arquivos_abertos[MAX_OPEN_FILES];
-OpenFile diretorios_abertos[MAX_OPEN_DIRS];
 
+OpenFile diretorios_abertos[MAX_OPEN_DIRS];
 
 /********** AUXILIARES ********/
 
@@ -203,6 +210,11 @@ FILE2 create2 (char *filename) {
     strncpy(lista_registros[index_registros].name,filename,MAX_FILE_NAME_SIZE - 1);
 
     strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE - 1);
+     if(strcmp(currentPath,"/") != 0)
+	{
+	  strcat(lista_registros[index_registros].pathName,"/");
+	}
+
     strcat(lista_registros[index_registros].pathName,filename);
     
     printf("\n nome: %s",lista_registros[index_registros].name);
@@ -356,6 +368,11 @@ int mkdir2 (char *pathname) {
     strncpy(lista_registros[index_registros].name,pathname,MAX_FILE_NAME_SIZE - 1);
 
     strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE - 1);
+    if(strcmp(currentPath,"/") != 0)
+	{
+	  strcat(lista_registros[index_registros].pathName,"/");
+	}
+
     strcat(lista_registros[index_registros].pathName,pathname);
     
     lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
@@ -379,7 +396,7 @@ int mkdir2 (char *pathname) {
     //writeBlock()
   
     
-   
+ opendir_relativo = TRUE;
  return opendir2(pathname); //Tem que retornar Opendir2
 
 }
@@ -417,6 +434,7 @@ int getcwd2 (char *pathname, int size) {
 /*-----------------------------------------------------------------------------
 Função:	Função que abre um diretório existente no disco.
 -----------------------------------------------------------------------------*/
+
 DIR2 opendir2 (char *pathname) {
 	
 	inicializaT2FS();
@@ -426,13 +444,21 @@ DIR2 opendir2 (char *pathname) {
 		return -1; // Não tem handles disponiveis
 	}
 
-	int index_dir = EncontraRegistroPeloPathname(pathname,ARQUIVO_DIRETORIO);
+	int index_dir = 0;
+	if(opendir_relativo == TRUE)
+	{
+	   index_dir = EncontraRegistroFilhoPeloNome(pathname,ARQUIVO_DIRETORIO);
+	}else
+	{
+	  index_dir = EncontraRegistroPeloPathname(pathname,ARQUIVO_DIRETORIO);
+	}
 
 	if(index_dir >= 0)
 	{
 		diretorios_abertos[freeHandle].registro = lista_registros[index_dir];
 		diretorios_abertos[freeHandle].currentPointer = 0;
 	}	
+	opendir_relativo = FALSE;	
 	return freeHandle;
 }
 
@@ -675,7 +701,7 @@ int EncontraRegistroFilhoPeloNome(char* name, WORD tipo)
 
 		Registro filho = lista_registros[index_filho];
 
-		printf("\n%s\n",lista_registros[cont].pathName);		
+		//printf("\n%s\n",lista_registros[cont].pathName);		
 		if(filho.name != NULL && strcmp(filho.name, name) == 0 && filho.fileType == tipo)
 		{
 		   return index_filho;
