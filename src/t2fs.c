@@ -32,12 +32,11 @@
 typedef struct reg {
     char*    name; /* Nome do arquivo      */
     char*    pathName; /* Nome do arquivo desde o Root      */
-    BYTE    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
+    WORD    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
     DWORD   fileSize; 
     DWORD   blocoInicial;
     DWORD   numeroDeBlocos;
     DWORD   filhos[MAX_FILHOS];
-
 } Registro;
 
 Registro lista_registros[MAX_BLOCOS]; // Lista de Todos os Registros conhecidos
@@ -93,8 +92,8 @@ void CriaRegistroDiretorioRoot(); //Vai Sumir
 int ApagaRegistroPeloNome( char *, int);
 int PegaIndexDoDiretorioAtual();
 int ColocaComoFilhoDoPai(int);
-int EncontraRegistroPeloPathname(char*,BYTE);
-
+int EncontraRegistroPeloPathname(char*,WORD);
+int EncontraRegistroFilhoPeloNome(char*,WORD);
 /* Interface Com o Disco */
 void writeBlock(int, char*);
 int PegaInformacoesDoDisco();
@@ -199,6 +198,8 @@ Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
 FILE2 create2 (char *filename) {
     inicializaT2FS();
 
+    //PathName precisa ser carregado do pai; Tem que ver as barrinhas
+
     strncpy(lista_registros[index_registros].name,filename,MAX_FILE_NAME_SIZE - 1);
 
     strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE - 1);
@@ -227,7 +228,7 @@ FILE2 create2 (char *filename) {
     //writeBlock()
 
 
-	return 0;
+	return open2(filename); // Tem que retornar Open
 }
 
 /*-----------------------------------------------------------------------------
@@ -256,12 +257,14 @@ FILE2 open2 (char *filename) {
 	FILE2 freeHandle = getFreeFileHandle();
 	if(freeHandle == -1)
 		return -1;
+	
+	
+	int index_arquivo = EncontraRegistroFilhoPeloNome(filename,ARQUIVO_REGULAR);
+	
 
-	Registro registro;
-
-	if(registro.fileType == ARQUIVO_REGULAR)
+	if(index_arquivo >= 0)
 	{
-		arquivos_abertos[freeHandle].registro = registro;
+		arquivos_abertos[freeHandle].registro = lista_registros[index_arquivo];
 		arquivos_abertos[freeHandle].currentPointer = 0;
 		return freeHandle;
 	}
@@ -344,6 +347,8 @@ int mkdir2 (char *pathname) {
     
    //Pelo certo deveria criar recebendo um caminho completo, criando os diretorios recursivamente?
 
+   //PathName precisa ser carregado do pai; Tem que ver as barrinhas;
+
     inicializaT2FS();
     
     printf("%s",pathname);
@@ -375,7 +380,7 @@ int mkdir2 (char *pathname) {
   
     
    
- return 0;
+ return opendir2(pathname); //Tem que retornar Opendir2
 
 }
 
@@ -393,7 +398,6 @@ Função:	Função usada para alterar o CP (current path)
 -----------------------------------------------------------------------------*/
 int chdir2 (char *pathname) {
 	inicializaT2FS();	
-
 	//Verificar se o diretorio desejado existe. Se não existir da erro
 	if (EncontraRegistroPeloPathname(pathname,ARQUIVO_DIRETORIO) < 0) {return -1;}
 
@@ -422,27 +426,54 @@ DIR2 opendir2 (char *pathname) {
 		return -1; // Não tem handles disponiveis
 	}
 
-	Registro registro;
-	
-	diretorios_abertos[freeHandle].registro = registro;
-	diretorios_abertos[freeHandle].currentPointer = 0;
+	int index_dir = EncontraRegistroPeloPathname(pathname,ARQUIVO_DIRETORIO);
 
+	if(index_dir >= 0)
+	{
+		diretorios_abertos[freeHandle].registro = lista_registros[index_dir];
+		diretorios_abertos[freeHandle].currentPointer = 0;
+	}	
 	return freeHandle;
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para ler as entradas de um diretório.
 -----------------------------------------------------------------------------*/
+int indice_readdir = 0;
 int readdir2 (DIR2 handle, DIRENT2 *dentry) {
-	//Equivalente ao LS do linux
-// Conctinua
+	
+	if(!isDirHandleValid(handle)){
+		return -1;
+	}
+	
+	int indice_diretorio_lido = EncontraRegistroPeloPathname(diretorios_abertos[handle].registro.pathName,ARQUIVO_DIRETORIO);
+
+	while(indice_readdir < MAX_FILHOS)
+	{
+	  if(lista_registros[indice_diretorio_lido].filhos[indice_readdir] != 0)
+	 {
+	    int indice_filho = 	lista_registros[indice_diretorio_lido].filhos[indice_readdir];
+            strncpy(dentry->name,lista_registros[indice_filho].name,MAX_FILE_NAME_SIZE);
+            dentry->fileType =  (BYTE)lista_registros[indice_filho].fileType;
+            dentry->fileSize =  (DWORD)2; //Só depois
+
+	   
+	   indice_readdir++;
+	   return 0;
+	 }
+         indice_readdir++;
+	}
+	indice_readdir = 0;
 	return -1;
 }
+
+
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para fechar um diretório.
 -----------------------------------------------------------------------------*/
 int closedir2 (DIR2 handle) {
+	//printf("Chamou CloseDir");	
 	inicializaT2FS();
 
 	if(!isDirHandleValid(handle)){
@@ -561,6 +592,9 @@ void inicializaArquivosAbertos(){
 	{
 		arquivos_abertos[i].registro.fileType = INVALID_PTR;
 	}
+
+	
+
 }
 
 void inicializaDiretoriosAbertos(){
@@ -570,15 +604,20 @@ void inicializaDiretoriosAbertos(){
 	{
 		diretorios_abertos[i].registro.fileType = INVALID_PTR;
 	}
+	diretorios_abertos[0].registro = lista_registros[0]; //root
 }
 
 FILE2 getFreeFileHandle(){
+		
 	FILE2 freeHandle;
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
-		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR)
+		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR){
+			
 			return freeHandle;
+		}
 	}
+	
 	return -2;
 }
 
@@ -589,8 +628,8 @@ DIR2 getFreeDirHandle(){
 		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR)
 			return freeHandle;
 	}
-	//return -2;
-	return 0;
+	return -2;
+	
 }
 
 int isFileHandleValid(FILE2 handle){
@@ -608,21 +647,43 @@ int isDirHandleValid(DIR2 handle){
 }
 
 
-int EncontraRegistroPeloPathname(char* pathName, BYTE tipo)
+int EncontraRegistroPeloPathname(char* pathName, WORD tipo)
 {
 	int cont = 0;
 	for(cont = 0; cont < index_registros; cont++)
 	{
-		printf("\n%s\n",lista_registros[cont].pathName);		
+	        //printf("\nAtual :%s Procurado: %s",lista_registros[cont].pathName,pathName);
 		if(lista_registros[cont].pathName != NULL && strcmp(lista_registros[cont].pathName, pathName) == 0 && lista_registros[cont].fileType == tipo)
 		{
 		   return cont;
 		}
 	}
-	printf("\nNão Foi Encontrado Registro com esse nome\n");
+	printf("\nNão Foi Encontrado Registro com esse pathName\n");
 	return -1;
 }
 
+int EncontraRegistroFilhoPeloNome(char* name, WORD tipo)
+{
+	int cont = 0;
+	int index_dir = PegaIndexDoDiretorioAtual();
+
+	int index_filho = 0;
+	for(cont = 0; cont < MAX_FILHOS; cont++)
+	{
+
+		index_filho = lista_registros[index_dir].filhos[cont];
+
+		Registro filho = lista_registros[index_filho];
+
+		printf("\n%s\n",lista_registros[cont].pathName);		
+		if(filho.name != NULL && strcmp(filho.name, name) == 0 && filho.fileType == tipo)
+		{
+		   return index_filho;
+		}
+	}
+	printf("\nNão Foi Encontrado Registro com esse nome\n");
+	return -1;
+}
 
 int ApagaRegistroPeloNome( char * pathname, int tipo)
 {
@@ -698,9 +759,7 @@ int VerificaSeJaTemIrmaoComMesmoNome(int index_pai,int index_filho)
 	   {
 		int index_irmao = lista_registros[index_pai].filhos[i];
 		if( strcmp(lista_registros[index_irmao].name,lista_registros[index_filho].name) == 0) {
-		printf("\nPAI : %s",lista_registros[index_pai].pathName);
-                printf("\nIRMAO : %s",lista_registros[index_irmao].name);
-                printf("\nVOCE : %s\n",lista_registros[index_filho].name);		    
+	    
 
   		return -1;  
 		}
@@ -715,7 +774,6 @@ int VerificaSeJaTemIrmaoComMesmoNome(int index_pai,int index_filho)
 int PegaIndexDoDiretorioAtual()
 {
  int i = 0;
- printf("\nlocal atual = %s\n",currentPath);
  for(i = 0; i < MAX_BLOCOS; i++)
     {
       if(strcmp(lista_registros[i].pathName,currentPath) == 0 && lista_registros[i].fileType == ARQUIVO_DIRETORIO)
