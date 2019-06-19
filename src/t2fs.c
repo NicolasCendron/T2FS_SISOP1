@@ -13,8 +13,8 @@
 #define TAMANHO_SETOR 256
 #define MAX_FILHOS 10
 #define MAX_BLOCOS 500
-
-
+#define REGISTROS_POR_SETOR 1
+#define SETOR_INICIO_LISTA_REGISTROS 4001
 #define FALSE 0
 #define TRUE 1
 
@@ -30,9 +30,9 @@
 //} DIRENT2;
 
 typedef struct reg {
-    char*    name; /* Nome do arquivo      */
-    char*    pathName; /* Nome do arquivo desde o Root      */
-    WORD    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
+    char    name[MAX_FILE_NAME_SIZE]; /* Nome do arquivo      */
+    char    pathName[MAX_FILE_NAME_SIZE]; /* Nome do arquivo desde o Root      */
+    DWORD    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
     DWORD   fileSize; 
     DWORD   blocoInicial;
     DWORD   numeroDeBlocos;
@@ -102,16 +102,17 @@ int ColocaComoFilhoDoPai(int);
 int EncontraRegistroPeloPathname(char*,WORD);
 int EncontraRegistroFilhoPeloNome(char*,WORD);
 /* Interface Com o Disco */
-void writeBlock(int, char*);
+void writeBlock(int, char*); //Não esta sendo usada
 int PegaInformacoesDoDisco();
-
+int writeListaRegistrosNoDisco();
+void writeDwordOnBuffer(unsigned char *, int, DWORD);
+int writeRegistroNoSetor(int indice, int setor);
 /* Regras de Negocio */
 int VerificaSeJaTemIrmaoComMesmoNome(int,int);
 
 /* Utilitarios */
 void limpa_buffer( unsigned char buffer[]);
-
-
+void append(char*, char);
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
@@ -164,10 +165,20 @@ int format2 (int sectors_per_block) {
 		return -1;
 	}
 
+	// Coloca no Setor 3 --> Tamanho em Setores da Lista de Registros; (cada registro ocupa um setor hoje)
+	limpa_buffer(buffer);
+	//Colocar nesse buffer o Registro do ROOT
+
+	sprintf ((char *)buffer, "%i",1);
+	
+	if(write_sector(3, buffer) != 0)
+	{
+		return -1;
+	}
+ 
 	
 	// Falta ainda colocar o endereço do vetor de bits;
 
-	// Falta ainda colocar o endereço a lista de Registros;
 
 	// Falta ainda criar o vetor de bits;
 
@@ -178,8 +189,8 @@ int format2 (int sectors_per_block) {
 
 	// Esvazia o resto do disco; Se adicionar mais coisas atualize o inicio do I
 	limpa_buffer(buffer);
-	int i = 3;
-	for (i = 3; i < sectors_per_block* MAX_BLOCOS; i++)
+	int i;
+	for (i = 4; i < 4050; i++)
 	{
 		
 		if(write_sector(i, buffer) != 0)
@@ -239,7 +250,7 @@ FILE2 create2 (char *filename) {
 
     //writeBlock()
 
-
+	if( writeListaRegistrosNoDisco() < 0) return -19;
 	return open2(filename); // Tem que retornar Open
 }
 
@@ -249,7 +260,7 @@ Função:	Função usada para remover (apagar) um arquivo do disco.
 int delete2 (char *filename) {
 
 	Registro regDeletado;
-	regDeletado.name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
+	//regDeletado.name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
 
 	strncpy(regDeletado.name,filename,MAX_FILE_NAME_SIZE - 1);
  
@@ -535,8 +546,8 @@ void inicializaT2FS()
 
 	int i; // DEPOIS VAI VIR TUDO DO DISCO
 	for (i = 0; i < MAX_BLOCOS; i++){
-		lista_registros[i].name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
-		lista_registros[i].pathName = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
+		//lista_registros[i].name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
+		//lista_registros[i].pathName = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
 		lista_registros[i].fileType = INVALID_PTR;
 
 	}
@@ -810,5 +821,97 @@ int PegaIndexDoDiretorioAtual()
     }  
 
  return -1;
+}
+
+int writeListaRegistrosNoDisco(){
+	unsigned char buffer[SECTOR_SIZE];
+	limpa_buffer(buffer);
+
+	int setorInicial = SETOR_INICIO_LISTA_REGISTROS;
+
+        int contadorEscritos = 0;
+	int index = 0;
+	for(index = 0; index < MAX_BLOCOS ; index++)
+	{
+	   if(lista_registros[index].fileType != INVALID_PTR) //Aqui Ja Remove aqueles registros que foram apagados.
+		{
+		   writeRegistroNoSetor(index, setorInicial + contadorEscritos);
+		   contadorEscritos++;
+		}
+
+	}
+
+	sprintf ((char *)buffer, "%i",contadorEscritos);
+ 	if (write_sector(3,buffer) != 0) return -16; // Escreve no Setor 3 o tamanho em Setores da Lista de registros;
+	
+	limpa_buffer(buffer);
+
+	//if (AtualizaListaRegistros() < 0) return -17;
+
+	return 0;
+}
+
+
+int writeRegistroNoSetor(int indice, int setor)
+{	unsigned char buffer[SECTOR_SIZE];
+	limpa_buffer(buffer);
+
+	unsigned char aux[SECTOR_SIZE];
+	limpa_buffer(aux);
+
+	Registro reg = lista_registros[indice];
+
+	strncat((char*)buffer,reg.name,MAX_FILE_NAME_SIZE);
+	append((char*)buffer,'$');	
+	strncat((char*)buffer,reg.pathName,MAX_FILE_NAME_SIZE);
+	append((char*)buffer,'$');	
+	
+	sprintf ((char*)aux, "%i",reg.fileType);	
+	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
+	limpa_buffer(aux);
+	
+	append((char*)buffer,'$');
+	
+	sprintf ((char *)aux, "%i",reg.fileSize);	
+	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
+	limpa_buffer(aux);
+
+	append((char*)buffer,'$');
+	
+	sprintf ((char *)aux, "%i",reg.blocoInicial);	
+	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
+	limpa_buffer(aux);
+
+	append((char*)buffer,'$');
+
+	sprintf ((char *)aux, "%i",reg.numeroDeBlocos);	
+	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
+	limpa_buffer(aux);
+
+	append((char*)buffer,'$');
+				
+
+	if (write_sector(setor,buffer) != 0) return -14;
+	
+	
+	printf("esse é o buffer %s\n",buffer);
+
+	return 0;
+}
+
+void writeDwordOnBuffer(unsigned char *buffer, int start, DWORD dword){
+	unsigned char *aux;
+	aux = (unsigned char*)&dword;
+	int i;
+	for(i = 0; i < 4; i++)
+		buffer[start + i] = aux[i];
+}
+
+
+void append(char* s, char c)
+{
+        int len = strlen(s);
+        s[len] = c;
+        s[len+1] = '\0';
 }
 
