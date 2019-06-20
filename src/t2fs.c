@@ -108,10 +108,13 @@ int EncontraRegistroFilhoPeloNome(char*,WORD);
 int deleteTree(int);
 /* Interface Com o Disco */
 void writeBlock(int, char*); //Não esta sendo usada
-int PegaInformacoesDoDisco();
 int writeListaRegistrosNoDisco();
 void writeDwordOnBuffer(unsigned char *, int, DWORD);
 int writeRegistroNoSetor(int indice, int setor);
+int readRegistroNoSetor(int indice, unsigned char* setor);
+int readListaRegistrosNoDisco();
+int PegaInformacoesDoDisco();
+
 /* Regras de Negocio */
 int VerificaSeJaTemIrmaoComMesmoNome(int,int);
 
@@ -173,7 +176,6 @@ int format2 (int sectors_per_block) {
 
 	// Coloca no Setor 3 --> Tamanho em Setores da Lista de Registros; (cada registro ocupa um setor hoje)
 	limpa_buffer(buffer);
-	//Colocar nesse buffer o Registro do ROOT
 
 	sprintf ((char *)buffer, "%i",1);
 
@@ -181,6 +183,7 @@ int format2 (int sectors_per_block) {
 	{
 		return -1;
 	}
+
 
 	// Falta ainda colocar o endereço do vetor de bits;
 
@@ -191,7 +194,6 @@ int format2 (int sectors_per_block) {
 	}
 	bitMap.lastWrittenIndex = 0; //Nenhum index escrito ainda começar com 0.
 
-	// Falta ainda criar a lista de Registros;
 
 	// Esvazia o resto do disco; Se adicionar mais coisas atualize o inicio do I
 	limpa_buffer(buffer);
@@ -204,6 +206,10 @@ int format2 (int sectors_per_block) {
 		}
 
 	}
+
+	CriaRegistroDiretorioRoot();
+	writeRegistroNoSetor(0,SETOR_INICIO_LISTA_REGISTROS);
+
 
 	inicializado = FALSE;
 	return 0;
@@ -233,10 +239,6 @@ FILE2 create2 (char *filename) {
 
     strcat(lista_registros[index_registros].pathName,filename);
 
-    printf("\n nome: %s",lista_registros[index_registros].name);
-    printf("\n pathName: %s\n",lista_registros[index_registros].pathName);
-
-
     lista_registros[index_registros].fileType = ARQUIVO_REGULAR;
     lista_registros[index_registros].blocoInicial = index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
@@ -248,11 +250,15 @@ FILE2 create2 (char *filename) {
         printf("\nNão foi possivel colocar como filho\n");
         return -1;}
 
+	int i;
+    for(i = 0; i < MAX_FILHOS; i++)
+	lista_registros[index_registros].filhos[i] = 0;
+
     index_registros++;
 
     //Tem que colocar o arquivo num bloco de disco
     //Tem que Atualizar o Vetor de Bits
-	int i;
+
 	for(i = 0; i < MAX_BLOCOS; i++){
 		if(bitMap.bits[i] == 1) { //Bloco está livre
 			bitMap.bits[i] = 0; //Está ocupado.
@@ -260,8 +266,6 @@ FILE2 create2 (char *filename) {
 			break; //Sai do loop
 		}
 	}
-
-    //writeBlock()
 
 	if( writeListaRegistrosNoDisco() < 0) return -19;
 	return open2(filename); // Tem que retornar Open
@@ -345,30 +349,10 @@ int read2 (FILE2 handle, char *buffer, int size) {
 Função:	Função usada para realizar a escrita de uma certa quantidade
 		de bytes (size) de  um arquivo.
 -----------------------------------------------------------------------------*/
-int write2 (FILE2 handle, char *buffer, int size) 
-{
+int write2 (FILE2 handle, char *buffer, int size) {
 	inicializaT2FS();
-	OpenFile file;
-	
-	if(isFileHandleValid(handle))
-	{
-		file = arquivos_abertos[handle].registro;
-		
-		if(file.registro.fileType == ARQUIVO_REGULAR)
-		{
-			write_sector(file.currentPointer,&buffer); //Escreve na pos o que esta no buffer
-			
-			file.currentPointer += size + 1; // Atualiza o contador de posição
-			
-			file.registro.fileSize += size; // Atualiza o tamanho
-			
-			arquivos_abertos[handle] = file;
-			
-			return size; // Retorna numero de bytes
-		
-		}
-		return -2;
-	}
+
+
 	return -2;
 }
 
@@ -417,7 +401,7 @@ int mkdir2 (char *pathname) {
 
     inicializaT2FS();
 
-    printf("%s",pathname);
+    //printf("%s",pathname);
 
     strncpy(lista_registros[index_registros].name,pathname,MAX_FILE_NAME_SIZE - 1);
 
@@ -432,9 +416,12 @@ int mkdir2 (char *pathname) {
     lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
     lista_registros[index_registros].blocoInicial = index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
+    int i;
+    for(i = 0; i < MAX_FILHOS; i++)
+	lista_registros[index_registros].filhos[i] = 0;
 
-    printf("\n nome: %s",lista_registros[index_registros].name);
-    printf("\n pathName: %s\n",lista_registros[index_registros].pathName);
+    //printf("\n nome: %s",lista_registros[index_registros].name);
+    //printf("\n pathName: %s\n",lista_registros[index_registros].pathName);
 
     if( ColocaComoFilhoDoPai(index_registros) < 0) {
 	lista_registros[index_registros].fileType = INVALID_PTR;
@@ -443,10 +430,7 @@ int mkdir2 (char *pathname) {
 
     index_registros++;
 
-    //Tem que colocar o diretorio num bloco de disco
-    //Tem que atualizar a lista de registros no disco.
     //Tem que Atualizar o Vetor de Bits
-	int i;
 	for (i = 0; i<MAX_BLOCOS;i++){
 		if(bitMap.bits[i] == 1){
 			bitMap.bits[i] = 0;
@@ -455,7 +439,8 @@ int mkdir2 (char *pathname) {
 		}
 	}
 
-    //writeBlock()
+
+	if( writeListaRegistrosNoDisco() < 0) return -19;
 
  	opendir_relativo = TRUE;
  	return opendir2(pathname); //Tem que retornar Opendir2
@@ -551,18 +536,18 @@ int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 	}
 
 	int indice_diretorio_lido = EncontraRegistroPeloPathname(diretorios_abertos[handle].registro.pathName,ARQUIVO_DIRETORIO);
-
+	
 	while(indice_readdir < MAX_FILHOS)
 	{
 	  if(lista_registros[indice_diretorio_lido].filhos[indice_readdir] != 0)
 	 {
 
 	    int indice_filho = 	lista_registros[indice_diretorio_lido].filhos[indice_readdir];
-            if(lista_registros[indice_filho].fileType != INVALID_PTR)
+            if(indice_filho != 0 && lista_registros[indice_filho].fileType != INVALID_PTR)
 		{
 	         strncpy(dentry->name,lista_registros[indice_filho].name,MAX_FILE_NAME_SIZE);
                  dentry->fileType =  (BYTE)lista_registros[indice_filho].fileType;
-                 dentry->fileSize =  (DWORD)2; //Só depois
+                 dentry->fileSize =  (DWORD)lista_registros[indice_filho].fileSize; //Só depois
 	         indice_readdir++;
 	         return 0;
 		}
@@ -612,17 +597,10 @@ void inicializaT2FS()
 		return;
 
 	PegaInformacoesDoDisco();
+	
+	strcpy(currentPath, "/");
 
-	int i; // DEPOIS VAI VIR TUDO DO DISCO
-	for (i = 0; i < MAX_BLOCOS; i++){
-		//lista_registros[i].name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
-		//lista_registros[i].pathName = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
-		lista_registros[i].fileType = INVALID_PTR;
-
-	}
-
-	CriaRegistroDiretorioRoot(); // Depois quando passar pro disco, Vai para o Format
-
+	readListaRegistrosNoDisco();
 
 	inicializaArquivosAbertos();
 	inicializaDiretoriosAbertos();
@@ -638,10 +616,15 @@ void CriaRegistroDiretorioRoot()
     strncpy(lista_registros[index_registros].name,"Root",MAX_FILE_NAME_SIZE - 1);
     strncpy(lista_registros[index_registros].pathName,"/",MAX_FILE_NAME_SIZE - 1);
     lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
+    lista_registros[index_registros].fileSize = 0;
     lista_registros[index_registros].blocoInicial = index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
-    strcpy(currentPath, lista_registros[index_registros].pathName);
-    index_registros++;
+    
+
+    int i ;
+    for (i = 0; i < MAX_FILHOS; i++)
+	lista_registros[index_registros].filhos[i] = 0;
+
 }
 
 
@@ -757,7 +740,6 @@ int EncontraRegistroPeloPathname(char* pathName, WORD tipo)
 	int cont = 0;
 	for(cont = 0; cont < index_registros; cont++)
 	{
-	        //printf("\nAtual :%s Procurado: %s",lista_registros[cont].pathName,pathName);
 		if(lista_registros[cont].pathName != NULL && strcmp(lista_registros[cont].pathName, pathName) == 0 && lista_registros[cont].fileType == tipo)
 		{
 		   return cont;
@@ -930,12 +912,10 @@ int writeListaRegistrosNoDisco(){
 	int index = 0;
 	for(index = 0; index < MAX_BLOCOS ; index++)
 	{
-	   if(lista_registros[index].fileType != INVALID_PTR) //Aqui Ja Remove aqueles registros que foram apagados.
-		{
-		   writeRegistroNoSetor(index, setorInicial + contadorEscritos);
-		   contadorEscritos++;
-		}
 
+	   writeRegistroNoSetor(index, setorInicial + contadorEscritos);
+	   contadorEscritos++;
+	
 	}
 
 	sprintf ((char *)buffer, "%i",contadorEscritos);
@@ -958,10 +938,18 @@ int writeRegistroNoSetor(int indice, int setor)
 
 	Registro reg = lista_registros[indice];
 
+	//Name
+
 	strncat((char*)buffer,reg.name,MAX_FILE_NAME_SIZE);
+	
 	append((char*)buffer,'$');
+
+	//FileName	
+
 	strncat((char*)buffer,reg.pathName,MAX_FILE_NAME_SIZE);
 	append((char*)buffer,'$');
+
+	//FileType
 
 	sprintf ((char*)aux, "%i",reg.fileType);
 	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
@@ -969,11 +957,15 @@ int writeRegistroNoSetor(int indice, int setor)
 
 	append((char*)buffer,'$');
 
+	//FileSize
+
 	sprintf ((char *)aux, "%i",reg.fileSize);
 	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
 	limpa_buffer(aux);
 
 	append((char*)buffer,'$');
+
+	//Bloco Inicial
 
 	sprintf ((char *)aux, "%i",reg.blocoInicial);
 	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
@@ -981,20 +973,154 @@ int writeRegistroNoSetor(int indice, int setor)
 
 	append((char*)buffer,'$');
 
+	//Numero de Blocos
+
 	sprintf ((char *)aux, "%i",reg.numeroDeBlocos);
 	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
 	limpa_buffer(aux);
 
 	append((char*)buffer,'$');
 
+	//Salvar Filhos
+	int i;
+	for(i = 0; i < MAX_FILHOS;i++)
+		{
+		  append((char*)aux,(char)lista_registros[indice].filhos[i] + '0');
+		  
+		}
+
+	strncat((char*)buffer,(char*)aux,MAX_FILHOS);
+	append((char*)buffer,'$');
 
 	if (write_sector(setor,buffer) != 0) return -14;
 
 
-	printf("esse é o buffer %s\n",buffer);
+	return 0;
+}
+
+int readListaRegistrosNoDisco(){
+	unsigned char buffer[SECTOR_SIZE];
+	limpa_buffer(buffer);
+
+	int setorInicial = SETOR_INICIO_LISTA_REGISTROS;
+
+	if (read_sector(3,buffer) != 0) return -16; // Le no Setor 3 o numero de Setores da Lista de registros;
+	int num_registros;
+
+	sscanf((char *)buffer,"%i", &num_registros);
+
+	//EsvaziaListaRegistros()
+
+	int index = 0;
+	for(index = 0; index < num_registros ; index++)
+	{	
+		limpa_buffer(buffer);
+		if (read_sector(setorInicial + index,buffer) != 0) return -17;
+		readRegistroNoSetor(index,buffer);
+		index_registros++;
+	}
 
 	return 0;
 }
+
+int readRegistroNoSetor(int indice, unsigned char* buffer)
+{
+	//printf("\nesse é o buffer :%s",buffer);
+	unsigned char aux[SECTOR_SIZE];
+	limpa_buffer(aux);
+
+	int indice_separador = 0;
+	int max_separadores = 7;
+	int separadores[7] = {0};	
+	int i;
+	for (i = 0; i < TAMANHO_SETOR || indice_separador == max_separadores; i++)
+	    {
+		if (buffer[i] == '$')
+			{
+			   separadores[indice_separador] = i;
+			   indice_separador++;
+			}
+	    }
+	
+	//Escreve Name
+	limpa_buffer((unsigned char *)lista_registros[indice].name);
+	for (i=0;i < separadores[0];i++)
+	    {
+		append(lista_registros[indice].name,buffer[i]);
+	    }
+
+	//printf("\nNome: %s", lista_registros[indice].name);
+
+	//Escreve Pathname
+	limpa_buffer( (unsigned char *) lista_registros[indice].pathName);
+	for (i=separadores[0] + 1;i < separadores[1];i++)
+	    {
+		append(lista_registros[indice].pathName,buffer[i]);
+	    }
+	
+        
+	//printf("\nPathName: %s", lista_registros[indice].pathName);
+
+	//Escreve fileTypr
+	char strFileType[5];
+	for (i=separadores[1] + 1;i < separadores[2];i++)
+	    {
+		append(strFileType,buffer[i]);
+	    }
+	
+	sscanf((char *)strFileType, "%i", &lista_registros[indice].fileType);	
+
+	//printf("\nTipo Arquivo: %d", lista_registros[indice].fileType);
+
+
+	//Escreve fileSize
+	char strFileSize[5];
+	for (i=separadores[2] + 1;i < separadores[3];i++)
+	    {
+		append(strFileSize,buffer[i]);
+	    }
+	
+	sscanf((char *)strFileSize, "%i", &lista_registros[indice].fileSize);	
+
+	//printf("\nTam Arquivo: %d", lista_registros[indice].fileSize);
+
+	//Escreve blocoInicial
+	char strBlocoInicial[5];
+	for (i=separadores[4] + 1;i < separadores[5];i++)
+	    {
+		append(strBlocoInicial,buffer[i]);
+	    }
+	
+	sscanf((char *)strBlocoInicial, "%i", &lista_registros[indice].blocoInicial);	
+
+	//printf("\nBloco Inicial: %d", lista_registros[indice].blocoInicial);
+
+	//Escreve numeroDeBlocos
+	char strNumeroDeBlocos[5];
+	for (i=separadores[4] + 1;i < separadores[5];i++)
+	    {
+		append(strNumeroDeBlocos,buffer[i]);
+	    }
+	
+	sscanf((char *)strNumeroDeBlocos, "%i", &lista_registros[indice].numeroDeBlocos);
+
+	//printf("\nNumero de Blocos: %d", lista_registros[indice].numeroDeBlocos);
+
+	//Escreve Filhos
+	int contFilho = 0;
+	//printf(" separa %d",separadores[5]);
+	//	printf("\nFilhos");
+
+	for (i=separadores[5] + 1;i < separadores[6];i++)
+	    {	
+		lista_registros[indice].filhos[contFilho] = buffer[i] - '0';
+			
+		contFilho++;
+	    }
+		
+	return 0;
+}
+
 
 void writeDwordOnBuffer(unsigned char *buffer, int start, DWORD dword){
 	unsigned char *aux;
