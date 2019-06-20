@@ -32,7 +32,7 @@ typedef struct reg {
     char    name[MAX_FILE_NAME_SIZE]; /* Nome do arquivo      */
     char    pathName[MAX_FILE_NAME_SIZE]; /* Nome do arquivo desde o Root      */
     DWORD    fileType;                   /* Tipo do arquivo: regular (0x01) ou diretório (0x02) */
-    DWORD   fileSize; 
+    DWORD   fileSize;
     DWORD   blocoInicial;
     DWORD   numeroDeBlocos;
     DWORD   filhos[MAX_FILHOS];
@@ -45,10 +45,10 @@ typedef struct t2fs_openfile{
 	DWORD currentPointer; // Em bytes a partir do inicio do arquivo!
 } OpenFile;
 
-struct informacoes_disco{       		
-	DWORD    NUMERO_DE_BLOCOS; 		
-	DWORD    SETORES_POR_BLOCO;	
-	DWORD    NUMERO_DE_SETORES;		
+struct informacoes_disco{
+	DWORD    NUMERO_DE_BLOCOS;
+	DWORD    SETORES_POR_BLOCO;
+	DWORD    NUMERO_DE_SETORES;
 	};
 typedef struct informacoes_disco INFO_DISCO;
 
@@ -59,6 +59,11 @@ typedef struct informacoes_disco INFO_DISCO;
 int opendir_relativo = FALSE;
 
 Registro lista_registros[MAX_BLOCOS]; // Lista de Todos os Registros conhecidos
+
+struct BitMap {
+	int bits[MAX_BLOCOS];
+	int lastWrittenIndex;
+} bitMap;
 
 char currentPath[MAX_FILE_NAME_SIZE+1];
 
@@ -131,7 +136,7 @@ int identify2 (char *name, int size) {
 
 /*-----------------------------------------------------------------------------
 Função:	Formata logicamente o disco virtual t2fs_disk.dat para o sistema de
-		arquivos T2FS definido usando blocos de dados de tamanho 
+		arquivos T2FS definido usando blocos de dados de tamanho
 		corresponde a um múltiplo de setores dados por sectors_per_block.
 -----------------------------------------------------------------------------*/
 int format2 (int sectors_per_block) {
@@ -139,9 +144,9 @@ int format2 (int sectors_per_block) {
 	unsigned char buffer[SECTOR_SIZE] = {0};
 
 	//Coloca no Setor 0 --> MAXIMO DE BLOCOS
-	
-	
-	
+
+
+
 	sprintf ((char *)buffer, "%i",MAX_BLOCOS);
 	if(write_sector(0, buffer) != 0)
 	{
@@ -150,7 +155,7 @@ int format2 (int sectors_per_block) {
 
 	// Coloca no Setor 1 --> Setores Por Bloco (MAX 8)
 	limpa_buffer(buffer);
-	
+
 	sprintf ((char *)buffer, "%i",sectors_per_block);
 	if(write_sector(1, buffer) != 0)
 	{
@@ -160,7 +165,7 @@ int format2 (int sectors_per_block) {
 	// Coloca no Setor 2 --> Total de Setores (Max 4000)
 	limpa_buffer(buffer);
 	sprintf ((char *)buffer, "%i",sectors_per_block* MAX_BLOCOS);
-	
+
 	if(write_sector(2, buffer) != 0)
 	{
 		return -1;
@@ -171,36 +176,35 @@ int format2 (int sectors_per_block) {
 	//Colocar nesse buffer o Registro do ROOT
 
 	sprintf ((char *)buffer, "%i",1);
-	
+
 	if(write_sector(3, buffer) != 0)
 	{
 		return -1;
 	}
- 
-	
+
 	// Falta ainda colocar o endereço do vetor de bits;
 
-
 	// Falta ainda criar o vetor de bits;
+	int i;
+	for (i = 0; i < MAX_BLOCOS; i++) {
+		bitMap.bits[i] = 1; //1 = tem vaga, 0 = ocupado de acordo com os slides.
+	}
+	bitMap.lastWrittenIndex = 0; //Nenhum index escrito ainda começar com 0.
 
 	// Falta ainda criar a lista de Registros;
 
-
-
-
 	// Esvazia o resto do disco; Se adicionar mais coisas atualize o inicio do I
 	limpa_buffer(buffer);
-	int i;
 	for (i = 4; i < 4050; i++)
 	{
-		
+
 		if(write_sector(i, buffer) != 0)
 		{
 			return -1;
 		}
-		
-	}  
-	
+
+	}
+
 	inicializado = FALSE;
 	return 0;
 }
@@ -210,8 +214,8 @@ int format2 (int sectors_per_block) {
 /*-----------------------------------------------------------------------------
 Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
 		sendo, nesse último aspecto, equivalente a função open2.
-		No entanto, diferentemente da open2, se filename referenciar um 
-		arquivo já existente, o mesmo terá seu conteúdo removido e 
+		No entanto, diferentemente da open2, se filename referenciar um
+		arquivo já existente, o mesmo terá seu conteúdo removido e
 		assumirá um tamanho de zero bytes.
 -----------------------------------------------------------------------------*/
 FILE2 create2 (char *filename) {
@@ -228,7 +232,7 @@ FILE2 create2 (char *filename) {
 	}
 
     strcat(lista_registros[index_registros].pathName,filename);
-    
+
     printf("\n nome: %s",lista_registros[index_registros].name);
     printf("\n pathName: %s\n",lista_registros[index_registros].pathName);
 
@@ -238,16 +242,24 @@ FILE2 create2 (char *filename) {
     lista_registros[index_registros].numeroDeBlocos = 1;
 
     //Tem que adicionar o arquivo na lista de filhos do pai (pai é o currentPath)
-    
+
    if( ColocaComoFilhoDoPai(index_registros) < 0) {
 	lista_registros[index_registros].fileType = INVALID_PTR;
         printf("\nNão foi possivel colocar como filho\n");
         return -1;}
-	
+
     index_registros++;
 
     //Tem que colocar o arquivo num bloco de disco
     //Tem que Atualizar o Vetor de Bits
+	int i;
+	for(i = 0; i < MAX_BLOCOS; i++){
+		if(bitMap.bits[i] == 1) { //Bloco está livre
+			bitMap.bits[i] = 0; //Está ocupado.
+			bitMap.lastWrittenIndex = i; //Salva ultimo index usado.
+			break; //Sai do loop
+		}
+	}
 
     //writeBlock()
 
@@ -256,15 +268,15 @@ FILE2 create2 (char *filename) {
 }
 
 /*-----------------------------------------------------------------------------
-Função:	Função usada para remover (apagar) um arquivo do disco. 
+Função:	Função usada para remover (apagar) um arquivo do disco.
 -----------------------------------------------------------------------------*/
 int delete2 (char *filename) {
 
-	int indice_encontrado =ApagaRegistroPeloNome(filename,ARQUIVO_REGULAR);
+	int indice_encontrado = ApagaRegistroPeloNome(filename,ARQUIVO_REGULAR);
 
 	//Remove do pai
 	int index_pai = PegaIndexDoDiretorioAtual();
-        
+
         int i;
 	for(i = 0; i < MAX_FILHOS; i ++)
 	   {
@@ -272,9 +284,13 @@ int delete2 (char *filename) {
 		{
 		  lista_registros[index_pai].filhos[i] = 0;
 		}
-           }
+    }
 
 	//Atualiza Vetor de bits
+	int posicaoDoBloco = lista_registros[index_pai].blocoInicial;
+	bitMap.bits[posicaoDoBloco] = 1;
+
+	//Ainda precisa deletar o arquivo do disco
 
 	return indice_encontrado;
 }
@@ -287,10 +303,10 @@ FILE2 open2 (char *filename) {
 	FILE2 freeHandle = getFreeFileHandle();
 	if(freeHandle == -1)
 		return -1;
-	
-	
+
+
 	int index_arquivo = EncontraRegistroFilhoPeloNome(filename,ARQUIVO_REGULAR);
-	
+
 
 	if(index_arquivo >= 0)
 	{
@@ -332,12 +348,12 @@ Função:	Função usada para realizar a escrita de uma certa quantidade
 int write2 (FILE2 handle, char *buffer, int size) {
 	inicializaT2FS();
 
-		
+
 	return -2;
 }
 
 /*-----------------------------------------------------------------------------
-Função:	Função usada para truncar um arquivo. Remove do arquivo 
+Função:	Função usada para truncar um arquivo. Remove do arquivo
 		todos os bytes a partir da posição atual do contador de posição
 		(current pointer), inclusive, até o seu final.
 -----------------------------------------------------------------------------*/
@@ -352,14 +368,14 @@ int seek2 (FILE2 handle, DWORD offset) {
 	inicializaT2FS();
 
 	/*OpenFile file;
-	
+
 	file = arquivos_abertos[handle];
 
 	if(file.registro.fileType == ARQUIVO_REGULAR)
 	{
 		if(offset != -1)
 			file.currentPointer = offset;
-		else 
+		else
 		{
 			file.currentPointer = -1; //DUVIDA
 		}
@@ -374,15 +390,15 @@ int seek2 (FILE2 handle, DWORD offset) {
 Função:	Função usada para criar um novo diretório.
 -----------------------------------------------------------------------------*/
 int mkdir2 (char *pathname) {
-    
+
    //Pelo certo deveria criar recebendo um caminho completo, criando os diretorios recursivamente?
 
    //PathName precisa ser carregado do pai; Tem que ver as barrinhas;
 
     inicializaT2FS();
-    
+
     printf("%s",pathname);
-   
+
     strncpy(lista_registros[index_registros].name,pathname,MAX_FILE_NAME_SIZE - 1);
 
     strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE - 1);
@@ -392,7 +408,7 @@ int mkdir2 (char *pathname) {
 	}
 
     strcat(lista_registros[index_registros].pathName,pathname);
-    
+
     lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
     lista_registros[index_registros].blocoInicial = index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
@@ -404,32 +420,38 @@ int mkdir2 (char *pathname) {
 	lista_registros[index_registros].fileType = INVALID_PTR;
         printf("\nNão foi possivel colocar como filho\n");
         return -1;}
-	
+
     index_registros++;
-  
+
     //Tem que colocar o diretorio num bloco de disco
-    //Tem que atualizar a lista de registros no disco. 
+    //Tem que atualizar a lista de registros no disco.
     //Tem que Atualizar o Vetor de Bits
+	int i;
+	for (i = 0; i<MAX_BLOCOS;i++){
+		if(bitMap.bits[i] == 1){
+			bitMap.bits[i] = 0;
+			bitMap.lastWrittenIndex = i;
+			break;
+		}
+	}
 
     //writeBlock()
-  
-    
- opendir_relativo = TRUE;
- return opendir2(pathname); //Tem que retornar Opendir2
 
+ 	opendir_relativo = TRUE;
+ 	return opendir2(pathname); //Tem que retornar Opendir2
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para remover (apagar) um diretório do disco.
 -----------------------------------------------------------------------------*/
 int rmdir2 (char *pathname) {
-	//Tem que apagar todos os filhos recursivamente	
- 
+	//Tem que apagar todos os filhos recursivamente
+
 	int indice_encontrado =ApagaRegistroPeloNome(pathname,ARQUIVO_DIRETORIO);
-	
+
 	//Remove do pai
 	int index_pai = PegaIndexDoDiretorioAtual();
-        
+
         int i;
 	for(i = 0; i < MAX_FILHOS; i ++)
 	   {
@@ -440,16 +462,17 @@ int rmdir2 (char *pathname) {
            }
 
 	//Atualiza Vetor de bits
+	int posicaoBloco = lista_registros[index_pai].blocoInicial;
+	bitMap.bits[posicaoBloco] = 1; //Está livre novamente;
 
 	return indice_encontrado;
-
 }
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para alterar o CP (current path)
 -----------------------------------------------------------------------------*/
 int chdir2 (char *pathname) {
-	inicializaT2FS();	
+	inicializaT2FS();
 	//Verificar se o diretorio desejado existe. Se não existir da erro
 	if (EncontraRegistroPeloPathname(pathname,ARQUIVO_DIRETORIO) < 0) {return -1;}
 
@@ -471,7 +494,7 @@ Função:	Função que abre um diretório existente no disco.
 -----------------------------------------------------------------------------*/
 
 DIR2 opendir2 (char *pathname) {
-	
+
 	inicializaT2FS();
 
 	DIR2 freeHandle = getFreeDirHandle();
@@ -492,8 +515,8 @@ DIR2 opendir2 (char *pathname) {
 	{
 		diretorios_abertos[freeHandle].registro = lista_registros[index_dir];
 		diretorios_abertos[freeHandle].currentPointer = 0;
-	}	
-	opendir_relativo = FALSE;	
+	}
+	opendir_relativo = FALSE;
 	return freeHandle;
 }
 
@@ -502,18 +525,18 @@ Função:	Função usada para ler as entradas de um diretório.
 -----------------------------------------------------------------------------*/
 int indice_readdir = 0;
 int readdir2 (DIR2 handle, DIRENT2 *dentry) {
-	
+
 	if(!isDirHandleValid(handle)){
 		return -1;
 	}
-	
+
 	int indice_diretorio_lido = EncontraRegistroPeloPathname(diretorios_abertos[handle].registro.pathName,ARQUIVO_DIRETORIO);
 
 	while(indice_readdir < MAX_FILHOS)
 	{
 	  if(lista_registros[indice_diretorio_lido].filhos[indice_readdir] != 0)
 	 {
-	    
+
 	    int indice_filho = 	lista_registros[indice_diretorio_lido].filhos[indice_readdir];
             if(lista_registros[indice_filho].fileType != INVALID_PTR)
 		{
@@ -536,7 +559,7 @@ int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 Função:	Função usada para fechar um diretório.
 -----------------------------------------------------------------------------*/
 int closedir2 (DIR2 handle) {
-	//printf("Chamou CloseDir");	
+	//printf("Chamou CloseDir");
 	inicializaT2FS();
 
 	if(!isDirHandleValid(handle)){
@@ -550,7 +573,7 @@ int closedir2 (DIR2 handle) {
 
 /*-----------------------------------------------------------------------------
 Função:	Função usada para criar um caminho alternativo (softlink) com
-		o nome dado por linkname (relativo ou absoluto) para um 
+		o nome dado por linkname (relativo ou absoluto) para um
 		arquivo ou diretório fornecido por filename.
 -----------------------------------------------------------------------------*/
 int ln2 (char *linkname, char *filename) {
@@ -579,13 +602,12 @@ void inicializaT2FS()
 	}
 
 	CriaRegistroDiretorioRoot(); // Depois quando passar pro disco, Vai para o Format
-	
+
 
 	inicializaArquivosAbertos();
 	inicializaDiretoriosAbertos();
 
-	ultimo_bloco_escrito = 50; //--> Buscar do VetorDeBits
-	
+	ultimo_bloco_escrito = bitMap.lastWrittenIndex; //--> Buscar do VetorDeBits
 
 	inicializado = TRUE;
 }
@@ -608,7 +630,7 @@ int PegaInformacoesDoDisco(){
 
 	unsigned char buffer[SECTOR_SIZE] = {0};
 
-	//Carrega a INFO do NUMERO_TOTAL_DE_BLOCOS	
+	//Carrega a INFO do NUMERO_TOTAL_DE_BLOCOS
 
 	limpa_buffer(buffer);
 
@@ -617,9 +639,9 @@ int PegaInformacoesDoDisco(){
 		return -1;
 	}
 
-	sscanf((char *)buffer, "%u", &CONTROLE.NUMERO_DE_BLOCOS);	
+	sscanf((char *)buffer, "%u", &CONTROLE.NUMERO_DE_BLOCOS);
 
-	
+
 	//Carrega a INFO do NUMERO de SETORES_POR_BLOCO
 
 	limpa_buffer(buffer);
@@ -628,7 +650,7 @@ int PegaInformacoesDoDisco(){
 		printf("Error: Failed reading sector 1!\n");
 		return -1;
 	}
-	
+
 	sscanf((char *)buffer, "%u", &CONTROLE.SETORES_POR_BLOCO);
 
 	//Carrega a INFO do NUMERO de SETORES
@@ -642,7 +664,7 @@ int PegaInformacoesDoDisco(){
 	}
 
 	sscanf((char *)buffer, "%u", &CONTROLE.NUMERO_DE_SETORES);
-	
+
 	return 0;
 
 }
@@ -656,7 +678,7 @@ void inicializaArquivosAbertos(){
 		arquivos_abertos[i].registro.fileType = INVALID_PTR;
 	}
 
-	
+
 
 }
 
@@ -671,16 +693,16 @@ void inicializaDiretoriosAbertos(){
 }
 
 FILE2 getFreeFileHandle(){
-		
+
 	FILE2 freeHandle;
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
 		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR){
-			
+
 			return freeHandle;
 		}
 	}
-	
+
 	return -2;
 }
 
@@ -692,7 +714,7 @@ DIR2 getFreeDirHandle(){
 			return freeHandle;
 	}
 	return -2;
-	
+
 }
 
 int isFileHandleValid(FILE2 handle){
@@ -738,7 +760,7 @@ int EncontraRegistroFilhoPeloNome(char* name, WORD tipo)
 
 		Registro filho = lista_registros[index_filho];
 
-		//printf("\n%s\n",lista_registros[cont].pathName);		
+		//printf("\n%s\n",lista_registros[cont].pathName);
 		if(filho.name != NULL && strcmp(filho.name, name) == 0 && filho.fileType == tipo)
 		{
 		   return index_filho;
@@ -755,15 +777,15 @@ int ApagaRegistroPeloNome( char * pathname, int tipo)
 	{
 		return -1;
 	}
-	deleteTree(indice); 
+	deleteTree(indice);
 	return indice;
 }
 
-int deleteTree(int indicePai)  
-{  
+int deleteTree(int indicePai)
+{
     lista_registros[indicePai].fileType = INVALID_PTR;
-    if (contaQuantosFilhos(indicePai) == 0) return indicePai;  
-  
+    if (contaQuantosFilhos(indicePai) == 0) return indicePai;
+
     int i;
     for(i = 0; i < MAX_FILHOS;i++)
 	{
@@ -771,7 +793,7 @@ int deleteTree(int indicePai)
 	   	deleteTree(lista_registros[indicePai].filhos[i]);
 	}
     return 0;
-}  
+}
 
 int contaQuantosFilhos(int indice)
 {
@@ -781,7 +803,7 @@ int contaQuantosFilhos(int indice)
 	{
 		if(lista_registros[indice].filhos != 0)
 		{
-			num_filhos++;	
+			num_filhos++;
 		}
 	}
 
@@ -794,7 +816,7 @@ void writeBlock(int blockNumber, char *buffer){
 	int sector = blockNumber*tamanho_bloco;
 	int sectors = 0;
 	int i, currentByte=0;
-	
+
 	while(sectors < tamanho_bloco ){
 			for(i = 0; i< SECTOR_SIZE; i++){
 				auxBuffer[i] = buffer[currentByte];
@@ -822,7 +844,7 @@ void limpa_buffer( unsigned char buffer[])
 int ColocaComoFilhoDoPai(int index_filho)
 {
   int index_pai = PegaIndexDoDiretorioAtual();
-  
+
   if(index_pai < 0) { printf("\nPai não encontrado\n"); return -1; }
 
   if( VerificaSeJaTemIrmaoComMesmoNome(index_pai,index_filho) < 0) {printf("\nJa Existe Irmão com o mesmo nome\n");return -2;}
@@ -851,9 +873,9 @@ int VerificaSeJaTemIrmaoComMesmoNome(int index_pai,int index_filho)
 	   {
 		int index_irmao = lista_registros[index_pai].filhos[i];
 		if( strcmp(lista_registros[index_irmao].name,lista_registros[index_filho].name) == 0) {
-	    
 
-  		return -1;  
+
+  		return -1;
 		}
            }
     }
@@ -870,10 +892,10 @@ int PegaIndexDoDiretorioAtual()
     {
       if(strcmp(lista_registros[i].pathName,currentPath) == 0 && lista_registros[i].fileType == ARQUIVO_DIRETORIO)
          {
-            
+
             return i;
-         }       
-    }  
+         }
+    }
 
  return -1;
 }
@@ -898,7 +920,7 @@ int writeListaRegistrosNoDisco(){
 
 	sprintf ((char *)buffer, "%i",contadorEscritos);
  	if (write_sector(3,buffer) != 0) return -16; // Escreve no Setor 3 o tamanho em Setores da Lista de registros;
-	
+
 	limpa_buffer(buffer);
 
 	//if (AtualizaListaRegistros() < 0) return -17;
@@ -917,38 +939,38 @@ int writeRegistroNoSetor(int indice, int setor)
 	Registro reg = lista_registros[indice];
 
 	strncat((char*)buffer,reg.name,MAX_FILE_NAME_SIZE);
-	append((char*)buffer,'$');	
+	append((char*)buffer,'$');
 	strncat((char*)buffer,reg.pathName,MAX_FILE_NAME_SIZE);
-	append((char*)buffer,'$');	
-	
-	sprintf ((char*)aux, "%i",reg.fileType);	
-	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
-	limpa_buffer(aux);
-	
 	append((char*)buffer,'$');
-	
-	sprintf ((char *)aux, "%i",reg.fileSize);	
-	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
-	limpa_buffer(aux);
 
-	append((char*)buffer,'$');
-	
-	sprintf ((char *)aux, "%i",reg.blocoInicial);	
+	sprintf ((char*)aux, "%i",reg.fileType);
 	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
 	limpa_buffer(aux);
 
 	append((char*)buffer,'$');
 
-	sprintf ((char *)aux, "%i",reg.numeroDeBlocos);	
+	sprintf ((char *)aux, "%i",reg.fileSize);
 	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
 	limpa_buffer(aux);
 
 	append((char*)buffer,'$');
-				
+
+	sprintf ((char *)aux, "%i",reg.blocoInicial);
+	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
+	limpa_buffer(aux);
+
+	append((char*)buffer,'$');
+
+	sprintf ((char *)aux, "%i",reg.numeroDeBlocos);
+	strncat((char*)buffer,(char*)aux,sizeof(DWORD));
+	limpa_buffer(aux);
+
+	append((char*)buffer,'$');
+
 
 	if (write_sector(setor,buffer) != 0) return -14;
-	
-	
+
+
 	printf("esse é o buffer %s\n",buffer);
 
 	return 0;
