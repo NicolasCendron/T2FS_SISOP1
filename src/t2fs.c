@@ -119,7 +119,7 @@ Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
 int identify2 (char *name, int size) {
 
-	char *grupo = "Diennifer P Vargas 00261612\nHenrique C Jordão 00230188\nNicolas C Fernandes 00230281\0";
+	char *grupo = "Dieniffer P Vargas 00261612\nHenrique C Jordão 00230188\nNicolas C Fernandes 00230281\0";
 	if(size < strlen(grupo)){
 		printf("faltou espaço\n");
 		return -1;
