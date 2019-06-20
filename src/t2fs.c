@@ -197,7 +197,7 @@ int format2 (int sectors_per_block) {
 
 	// Esvazia o resto do disco; Se adicionar mais coisas atualize o inicio do I
 	limpa_buffer(buffer);
-	for (i = 4; i < 4050; i++)
+	for (i = 4; i < 4500; i++)
 	{
 
 		if(write_sector(i, buffer) != 0)
@@ -226,7 +226,8 @@ Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
 -----------------------------------------------------------------------------*/
 FILE2 create2 (char *filename) {
     inicializaT2FS();
-
+    printf(" %s",currentPath); 
+   
     //PathName precisa ser carregado do pai; Tem que ver as barrinhas
 
     strncpy(lista_registros[index_registros].name,filename,MAX_FILE_NAME_SIZE - 1);
@@ -403,13 +404,12 @@ int mkdir2 (char *pathname) {
 
     //printf("%s",pathname);
 
-    strncpy(lista_registros[index_registros].name,pathname,MAX_FILE_NAME_SIZE - 1);
+    strncpy(lista_registros[index_registros].name,pathname,MAX_FILE_NAME_SIZE);
 
-    strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE - 1);
-    if(strcmp(currentPath,"/") != 0)
-	{
-	  strcat(lista_registros[index_registros].pathName,"/");
-	}
+    strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE);
+    
+	printf("current path %s",currentPath);
+
 
     strcat(lista_registros[index_registros].pathName,pathname);
 
@@ -595,10 +595,10 @@ void inicializaT2FS()
 {
 	if(inicializado)
 		return;
-
+	strncpy(currentPath, "/\0",2);
 	PegaInformacoesDoDisco();
 	
-	strcpy(currentPath, "/");
+	
 
 	readListaRegistrosNoDisco();
 
@@ -606,7 +606,6 @@ void inicializaT2FS()
 	inicializaDiretoriosAbertos();
 
 	ultimo_bloco_escrito = bitMap.lastWrittenIndex; //--> Buscar do VetorDeBits
-
 	inicializado = TRUE;
 }
 
@@ -701,7 +700,7 @@ FILE2 getFreeFileHandle(){
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
 		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR){
-
+			arquivos_abertos[freeHandle].registro = lista_registros[index_registros];
 			return freeHandle;
 		}
 	}
@@ -910,7 +909,7 @@ int writeListaRegistrosNoDisco(){
 
         int contadorEscritos = 0;
 	int index = 0;
-	for(index = 0; index < MAX_BLOCOS ; index++)
+	for(index = 0; index < index_registros ; index++)
 	{
 
 	   writeRegistroNoSetor(index, setorInicial + contadorEscritos);
