@@ -345,10 +345,28 @@ int read2 (FILE2 handle, char *buffer, int size) {
 Função:	Função usada para realizar a escrita de uma certa quantidade
 		de bytes (size) de  um arquivo.
 -----------------------------------------------------------------------------*/
-int write2 (FILE2 handle, char *buffer, int size) {
+int write2 (FILE2 handle, char *buffer, int size) 
+{
 	inicializaT2FS();
-
-
+	OpenFile file;
+	
+	if(isFileHandleValid(handle))
+	{
+		file = arquivos_abertos[handle].registro;
+		
+		if(file.registro.fileType == ARQUIVO_REGULAR)
+		{
+			write_sector(file.currentPointer,&buffer); //Escreve na pos o que esta no buffer
+			
+			file.currentPointer += size + 1; // Atualiza o contador de posição
+			
+			arquivos_abertos[handle] = file;
+			
+			return size; // Retorna numero de bytes
+		
+		}
+		return -2;
+	}
 	return -2;
 }
 
