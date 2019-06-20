@@ -357,11 +357,11 @@ int write2 (FILE2 handle, char *buffer, int size)
 	
 	if(isFileHandleValid(handle))
 	{
-		file = arquivos_abertos[handle].registro;
+		file.registro = arquivos_abertos[handle].registro;
 		
 		if(file.registro.fileType == ARQUIVO_REGULAR)
 		{
-			write_sector(file.currentPointer,&buffer); //Escreve na pos o que esta no buffer
+			write_sector(file.currentPointer,(unsigned char *)&buffer); //Escreve na pos o que esta no buffer
 			
 			file.currentPointer += size + 1; // Atualiza o contador de posição
 			file.registro.fileSize += size; // Atualiza tamanho
@@ -634,7 +634,7 @@ void CriaRegistroDiretorioRoot()
     strncpy(lista_registros[index_registros].pathName,"/",MAX_FILE_NAME_SIZE - 1);
     lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
     lista_registros[index_registros].fileSize = 0;
-    lista_registros[index_registros].blocoInicial = index_registros;
+    lista_registros[index_registros].blocoInicial = -1;
     lista_registros[index_registros].numeroDeBlocos = 1;
     
 
