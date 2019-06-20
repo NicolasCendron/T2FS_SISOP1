@@ -19,7 +19,6 @@
 #define TRUE 1
 
 
-
 //DIRENT2 : Descritor
 
 //typedef struct {
@@ -101,6 +100,7 @@ int PegaIndexDoDiretorioAtual();
 int ColocaComoFilhoDoPai(int);
 int EncontraRegistroPeloPathname(char*,WORD);
 int EncontraRegistroFilhoPeloNome(char*,WORD);
+int deleteTree(int);
 /* Interface Com o Disco */
 void writeBlock(int, char*); //Não esta sendo usada
 int PegaInformacoesDoDisco();
@@ -113,6 +113,7 @@ int VerificaSeJaTemIrmaoComMesmoNome(int,int);
 /* Utilitarios */
 void limpa_buffer( unsigned char buffer[]);
 void append(char*, char);
+int contaQuantosFilhos(int indice);
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
@@ -259,17 +260,23 @@ Função:	Função usada para remover (apagar) um arquivo do disco.
 -----------------------------------------------------------------------------*/
 int delete2 (char *filename) {
 
-	Registro regDeletado;
-	//regDeletado.name = malloc(sizeof(char) * MAX_FILE_NAME_SIZE);
+	int indice_encontrado =ApagaRegistroPeloNome(filename,ARQUIVO_REGULAR);
 
-	strncpy(regDeletado.name,filename,MAX_FILE_NAME_SIZE - 1);
- 
-	int encontrou =ApagaRegistroPeloNome(filename,ARQUIVO_REGULAR);
-	
-	//Apaga o arquivo	
+	//Remove do pai
+	int index_pai = PegaIndexDoDiretorioAtual();
+        
+        int i;
+	for(i = 0; i < MAX_FILHOS; i ++)
+	   {
+	    if(lista_registros[index_pai].filhos[i] == indice_encontrado)
+		{
+		  lista_registros[index_pai].filhos[i] = 0;
+		}
+           }
+
 	//Atualiza Vetor de bits
 
-	return encontrou;
+	return indice_encontrado;
 }
 
 /*-----------------------------------------------------------------------------
@@ -417,8 +424,25 @@ Função:	Função usada para remover (apagar) um diretório do disco.
 -----------------------------------------------------------------------------*/
 int rmdir2 (char *pathname) {
 	//Tem que apagar todos os filhos recursivamente	
+ 
+	int indice_encontrado =ApagaRegistroPeloNome(pathname,ARQUIVO_DIRETORIO);
+	
+	//Remove do pai
+	int index_pai = PegaIndexDoDiretorioAtual();
+        
+        int i;
+	for(i = 0; i < MAX_FILHOS; i ++)
+	   {
+	    if(lista_registros[index_pai].filhos[i] == indice_encontrado)
+		{
+		 lista_registros[index_pai].filhos[i] = 0;
+		}
+           }
 
-	return -1;
+	//Atualiza Vetor de bits
+
+	return indice_encontrado;
+
 }
 
 /*-----------------------------------------------------------------------------
@@ -489,14 +513,16 @@ int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 	{
 	  if(lista_registros[indice_diretorio_lido].filhos[indice_readdir] != 0)
 	 {
+	    
 	    int indice_filho = 	lista_registros[indice_diretorio_lido].filhos[indice_readdir];
-            strncpy(dentry->name,lista_registros[indice_filho].name,MAX_FILE_NAME_SIZE);
-            dentry->fileType =  (BYTE)lista_registros[indice_filho].fileType;
-            dentry->fileSize =  (DWORD)2; //Só depois
-
-	   
-	   indice_readdir++;
-	   return 0;
+            if(lista_registros[indice_filho].fileType != INVALID_PTR)
+		{
+	         strncpy(dentry->name,lista_registros[indice_filho].name,MAX_FILE_NAME_SIZE);
+                 dentry->fileType =  (BYTE)lista_registros[indice_filho].fileType;
+                 dentry->fileSize =  (DWORD)2; //Só depois
+	         indice_readdir++;
+	         return 0;
+		}
 	 }
          indice_readdir++;
 	}
@@ -724,13 +750,42 @@ int EncontraRegistroFilhoPeloNome(char* name, WORD tipo)
 
 int ApagaRegistroPeloNome( char * pathname, int tipo)
 {
-	int indice = EncontraRegistroPeloPathname(pathname,tipo);
+	int indice = EncontraRegistroFilhoPeloNome(pathname,tipo);
 	if(indice < 0)
 	{
 		return -1;
 	}
-	lista_registros[indice].fileType = INVALID_PTR; 
-	return 0;
+	deleteTree(indice); 
+	return indice;
+}
+
+int deleteTree(int indicePai)  
+{  
+    lista_registros[indicePai].fileType = INVALID_PTR;
+    if (contaQuantosFilhos(indicePai) == 0) return indicePai;  
+  
+    int i;
+    for(i = 0; i < MAX_FILHOS;i++)
+	{
+	   if(lista_registros[indicePai].filhos[i] != 0)
+	   	deleteTree(lista_registros[indicePai].filhos[i]);
+	}
+    return 0;
+}  
+
+int contaQuantosFilhos(int indice)
+{
+   int num_filhos = 0;
+   int cont = 0;
+   for (cont = 0; cont < MAX_FILHOS; cont++)
+	{
+		if(lista_registros[indice].filhos != 0)
+		{
+			num_filhos++;	
+		}
+	}
+
+    return num_filhos;
 }
 
 
