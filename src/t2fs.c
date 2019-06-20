@@ -360,6 +360,8 @@ int write2 (FILE2 handle, char *buffer, int size)
 			
 			file.currentPointer += size + 1; // Atualiza o contador de posição
 			
+			file.registro.fileSize += size; // Atualiza o tamanho
+			
 			arquivos_abertos[handle] = file;
 			
 			return size; // Retorna numero de bytes
