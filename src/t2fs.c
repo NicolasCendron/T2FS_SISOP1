@@ -18,6 +18,8 @@
 #define FALSE 0
 #define TRUE 1
 #define SETOR_INICIO_ESCRITA 100
+#define VETOR_BITS_INICIO 100
+#define VETOR_BITS_FIM 2100
 
 //DIRENT2 : Descritor
 
@@ -196,7 +198,7 @@ int format2 (int sectors_per_block) {
 	{
 		return -1;
 	}
-	
+
 	int i;
 	for (i = SETOR_INICIO_ESCRITA; i < MAX_BLOCOS; i++) {
 		bitMap.bits[i] = 1; //1 = tem vaga, 0 = ocupado de acordo com os slides.
@@ -219,7 +221,6 @@ int format2 (int sectors_per_block) {
 	LimpaListaRegistros();
 	CriaRegistroDiretorioRoot();
 	writeRegistroNoSetor(0,SETOR_INICIO_LISTA_REGISTROS);
-
 
 	inicializado = FALSE;
 	return 0;
@@ -641,7 +642,6 @@ int ln2 (char *linkname, char *filename) {
 	return -1;
 }
 
-
 /* AUXILIARES */
 
 void inicializaT2FS()
@@ -650,8 +650,6 @@ void inicializaT2FS()
 		return;
 	strncpy(currentPath, "/\0",2);
 	PegaInformacoesDoDisco();
-	
-	
 
 	readListaRegistrosNoDisco();
 
@@ -661,7 +659,6 @@ void inicializaT2FS()
 	ultimo_bloco_escrito = bitMap.lastWrittenIndex; //--> Buscar do VetorDeBits
 	inicializado = TRUE;
 }
-
 
 void CriaRegistroDiretorioRoot()
 {
@@ -676,9 +673,7 @@ void CriaRegistroDiretorioRoot()
     int i ;
     for (i = 0; i < MAX_FILHOS; i++)
 	lista_registros[index_registros].filhos[i] = 0;
-
 }
-
 
 int PegaInformacoesDoDisco(){
 
@@ -710,7 +705,6 @@ int PegaInformacoesDoDisco(){
 
 	//Carrega a INFO do NUMERO de SETORES
 
-
 	limpa_buffer(buffer);
 
 	if(read_sector(2, buffer) != 0){
@@ -721,7 +715,6 @@ int PegaInformacoesDoDisco(){
 	sscanf((char *)buffer, "%u", &CONTROLE.NUMERO_DE_SETORES);
 
 	return 0;
-
 }
 
 
@@ -732,9 +725,6 @@ void inicializaArquivosAbertos(){
 	{
 		arquivos_abertos[i].registro.fileType = INVALID_PTR;
 	}
-
-
-
 }
 
 void inicializaDiretoriosAbertos(){
@@ -786,7 +776,6 @@ int isDirHandleValid(DIR2 handle){
 	else
 		return TRUE;
 }
-
 
 int EncontraRegistroPeloPathname(char* pathName, WORD tipo)
 {
