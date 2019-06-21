@@ -17,7 +17,7 @@
 #define SETOR_INICIO_LISTA_REGISTROS 4001
 #define FALSE 0
 #define TRUE 1
-
+#define SETOR_INICIO_ESCRITA 100
 
 //DIRENT2 : Descritor
 
@@ -93,7 +93,7 @@ void inicializaArquivosAbertos();
 void inicializaDiretoriosAbertos();
 
 /* Handle de Arquivos e Diretorios */
-FILE2 getFreeFileHandle();
+FILE2 getFreeFileHandle(int);
 FILE2 getFreeDirHandle();
 int isFileHandleValid(FILE2);
 int isDirHandleValid(DIR2);
@@ -106,6 +106,7 @@ int ColocaComoFilhoDoPai(int);
 int EncontraRegistroPeloPathname(char*,WORD);
 int EncontraRegistroFilhoPeloNome(char*,WORD);
 int deleteTree(int);
+void LimpaListaRegistros();
 /* Interface Com o Disco */
 void writeBlock(int, char*); //Não esta sendo usada
 int writeListaRegistrosNoDisco();
@@ -122,6 +123,7 @@ int VerificaSeJaTemIrmaoComMesmoNome(int,int);
 void limpa_buffer( unsigned char buffer[]);
 void append(char*, char);
 int contaQuantosFilhos(int indice);
+void LimpaOpenFiles();
 /*-----------------------------------------------------------------------------
 Função:	Informa a identificação dos desenvolvedores do T2FS.
 -----------------------------------------------------------------------------*/
@@ -207,6 +209,7 @@ int format2 (int sectors_per_block) {
 
 	}
 
+	LimpaListaRegistros();
 	CriaRegistroDiretorioRoot();
 	writeRegistroNoSetor(0,SETOR_INICIO_LISTA_REGISTROS);
 
@@ -241,7 +244,7 @@ FILE2 create2 (char *filename) {
     strcat(lista_registros[index_registros].pathName,filename);
 
     lista_registros[index_registros].fileType = ARQUIVO_REGULAR;
-    lista_registros[index_registros].blocoInicial = index_registros;
+    lista_registros[index_registros].blocoInicial = SETOR_INICIO_ESCRITA + index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
 
     //Tem que adicionar o arquivo na lista de filhos do pai (pai é o currentPath)
@@ -305,12 +308,14 @@ Função:	Função que abre um arquivo existente no disco.
 -----------------------------------------------------------------------------*/
 FILE2 open2 (char *filename) {
 	inicializaT2FS();
-	FILE2 freeHandle = getFreeFileHandle();
+	
+	int index_arquivo = EncontraRegistroFilhoPeloNome(filename,ARQUIVO_REGULAR);
+
+	FILE2 freeHandle = getFreeFileHandle(index_arquivo);
 	if(freeHandle == -1)
 		return -1;
 
 
-	int index_arquivo = EncontraRegistroFilhoPeloNome(filename,ARQUIVO_REGULAR);
 
 
 	if(index_arquivo >= 0)
@@ -353,26 +358,28 @@ Função:	Função usada para realizar a escrita de uma certa quantidade
 int write2 (FILE2 handle, char *buffer, int size) 
 {
 	inicializaT2FS();
-	OpenFile file;
+
+	char aux[SECTOR_SIZE];
+	strncpy(aux,buffer,size);
 	
 	if(isFileHandleValid(handle))
-	{
-		file.registro = arquivos_abertos[handle].registro;
-		
-		if(file.registro.fileType == ARQUIVO_REGULAR)
-		{
-			write_sector(file.currentPointer,(unsigned char *)&buffer); //Escreve na pos o que esta no buffer
+	{	
+		printf("file type %d",arquivos_abertos[handle].registro.fileType);
+		if(arquivos_abertos[handle].registro.fileType == ARQUIVO_REGULAR)
+		{	printf("\nbuffer :%s\n",buffer);
+			printf("\nsetor escrita :%d\n",arquivos_abertos[handle].registro.blocoInicial);
+			write_sector(arquivos_abertos[handle].registro.blocoInicial,(unsigned char *)&aux); //Escreve na pos o que esta no buffer
 			
-			file.currentPointer += size + 1; // Atualiza o contador de posição
-			file.registro.fileSize += size; // Atualiza tamanho
-			arquivos_abertos[handle] = file;
+			arquivos_abertos[handle].currentPointer += size + 1; // Atualiza o contador de posição
+			arquivos_abertos[handle].registro.fileSize += size; // Atualiza tamanho
+
 			
 			return size; // Retorna numero de bytes
 		
 		}
 		return -2;
 	}
-	return -2;
+	return -3;
 }
 
 /*-----------------------------------------------------------------------------
@@ -561,7 +568,8 @@ int readdir2 (DIR2 handle, DIRENT2 *dentry) {
 	 {
 
 	    int indice_filho = 	lista_registros[indice_diretorio_lido].filhos[indice_readdir];
-            if(indice_filho != 0 && lista_registros[indice_filho].fileType != INVALID_PTR)
+            if(indice_filho != 0 && 
+		(lista_registros[indice_filho].fileType == ARQUIVO_REGULAR || lista_registros[indice_filho].fileType == ARQUIVO_DIRETORIO ))
 		{
 	         strncpy(dentry->name,lista_registros[indice_filho].name,MAX_FILE_NAME_SIZE);
                  dentry->fileType =  (BYTE)lista_registros[indice_filho].fileType;
@@ -712,13 +720,13 @@ void inicializaDiretoriosAbertos(){
 	diretorios_abertos[0].registro = lista_registros[0]; //root
 }
 
-FILE2 getFreeFileHandle(){
+FILE2 getFreeFileHandle(int index_reg){
 
 	FILE2 freeHandle;
 	for(freeHandle = 0; freeHandle < MAX_OPEN_FILES; freeHandle++)
 	{
 		if(arquivos_abertos[freeHandle].registro.fileType == INVALID_PTR){
-			arquivos_abertos[freeHandle].registro = lista_registros[index_registros];
+			arquivos_abertos[freeHandle].registro = lista_registros[index_reg];
 			return freeHandle;
 		}
 	}
@@ -731,6 +739,7 @@ DIR2 getFreeDirHandle(){
 	for(freeHandle = 0; freeHandle < MAX_OPEN_DIRS; freeHandle++)
 	{
 		if(diretorios_abertos[freeHandle].registro.fileType == INVALID_PTR)
+			diretorios_abertos[freeHandle].registro = lista_registros[index_registros];
 			return freeHandle;
 	}
 	return -2;
@@ -1153,5 +1162,48 @@ void append(char* s, char c)
         int len = strlen(s);
         s[len] = c;
         s[len+1] = '\0';
+}
+
+void LimpaListaRegistros()
+{
+  int i;
+  for(i = 0; i < index_registros; i++)
+	{
+		strncpy(lista_registros[index_registros].name,"\0",1);
+		strncpy(lista_registros[index_registros].pathName,"\0",1);
+		lista_registros[index_registros].fileType = INVALID_PTR;
+		lista_registros[index_registros].blocoInicial = 0;
+		lista_registros[index_registros].numeroDeBlocos = 0;
+		
+		int j = 0;
+		for(j = 0; j < MAX_FILHOS; j++)
+			{
+				lista_registros[index_registros].filhos[j] = 0;
+			}
+
+	}
+	index_registros = 0;
+}
+
+void LimpaOpenFiles()
+{
+  int i;
+  for(i = 0; i < MAX_OPEN_FILES; i++)
+	{
+
+		strncpy(arquivos_abertos[i].registro.name,"\0",1);
+		strncpy(arquivos_abertos[i].registro.pathName,"\0",1);
+		arquivos_abertos[i].registro.fileType = INVALID_PTR;
+		arquivos_abertos[i].registro.blocoInicial = 0;
+		arquivos_abertos[i].registro.numeroDeBlocos = 0;
+		arquivos_abertos[i].currentPointer = 0;
+		int j = 0;
+		for(j = 0; j < MAX_FILHOS; j++)
+			{
+				arquivos_abertos[i].registro.filhos[j] = 0;
+			}
+
+	}
+
 }
 
