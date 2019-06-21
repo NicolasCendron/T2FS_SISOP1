@@ -190,6 +190,13 @@ int format2 (int sectors_per_block) {
 	// Falta ainda colocar o endereço do vetor de bits;
 
 	// Falta ainda criar o vetor de bits;
+	limpa_buffer(buffer);
+	sprintf((char *)buffer, "%i",1);
+	if(write_sector(4, buffer) != 0)
+	{
+		return -1;
+	}
+	
 	int i;
 	for (i = SETOR_INICIO_ESCRITA; i < MAX_BLOCOS; i++) {
 		bitMap.bits[i] = 1; //1 = tem vaga, 0 = ocupado de acordo com os slides.
