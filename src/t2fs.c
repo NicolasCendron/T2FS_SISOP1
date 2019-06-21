@@ -237,7 +237,7 @@ Função:	Função usada para criar um novo arquivo no disco e abrí-lo,
 -----------------------------------------------------------------------------*/
 FILE2 create2 (char *filename) {
     inicializaT2FS();
-    printf(" %s",currentPath); 
+   // printf(" %s",currentPath); 
    
     //PathName precisa ser carregado do pai; Tem que ver as barrinhas
 
@@ -279,7 +279,7 @@ FILE2 create2 (char *filename) {
 		}
 	}
 
-	lista_registros[index_registros].blocoInicial = bitMap.lastWrittenIndex;
+	lista_registros[index_registros].blocoInicial = SETOR_INICIO_ESCRITA + index_registros;//bitMap.lastWrittenIndex;
 	index_registros++;
 
 
@@ -294,8 +294,12 @@ int delete2 (char *filename) {
 
 	int indice_encontrado = ApagaRegistroPeloNome(filename,ARQUIVO_REGULAR);
 
+	if(indice_encontrado < 0 )
+		return -1;
+
 	//Remove do pai
 	int index_pai = PegaIndexDoDiretorioAtual();
+
 
         int i;
 	for(i = 0; i < MAX_FILHOS; i ++)
@@ -367,7 +371,7 @@ int read2 (FILE2 handle, char *buffer, int size) {
 	unsigned char buff_disco[SECTOR_SIZE];
 
 	int setor = arquivos_abertos[handle].registro.blocoInicial;
-	printf("%d",setor);
+	//printf("%d",setor);
 	if(read_sector(setor, buff_disco) != 0)
 	{
 		printf("Error: Failed reading sector!\n");
@@ -394,10 +398,10 @@ int write2 (FILE2 handle, char *buffer, int size)
 	
 	if(isFileHandleValid(handle))
 	{	
-		printf("file type %d",arquivos_abertos[handle].registro.fileType);
+		//printf("file type %d",arquivos_abertos[handle].registro.fileType);
 		if(arquivos_abertos[handle].registro.fileType == ARQUIVO_REGULAR)
-		{	printf("\nbuffer :%s\n",buffer);
-			printf("\nsetor escrita :%d\n",arquivos_abertos[handle].registro.blocoInicial);
+		{	//printf("\nbuffer :%s\n",buffer);
+			//printf("\nsetor escrita :%d\n",arquivos_abertos[handle].registro.blocoInicial);
 			write_sector(arquivos_abertos[handle].registro.blocoInicial,(unsigned char *)&aux); //Escreve na pos o que esta no buffer
 			
 			arquivos_abertos[handle].currentPointer += size + 1; // Atualiza o contador de posição
@@ -464,7 +468,14 @@ int mkdir2 (char *pathname) {
 
     strncpy(lista_registros[index_registros].pathName,currentPath,MAX_FILE_NAME_SIZE);
     
-	printf("current path %s",currentPath);
+  if(strcmp(currentPath,"/") != 0)
+	{
+	  strcat(lista_registros[index_registros].pathName,"/");
+	}
+
+	
+
+	//printf("current path %s",currentPath);
 
 
     strcat(lista_registros[index_registros].pathName,pathname);
@@ -493,7 +504,7 @@ int mkdir2 (char *pathname) {
 			break;
 		}
 	}
-	lista_registros[index_registros].blocoInicial = bitMap.lastWrittenIndex;
+	lista_registros[index_registros].blocoInicial = SETOR_INICIO_ESCRITA + index_registros; // bitMap.lastWrittenIndex;
 	index_registros++;
 
 	if( writeListaRegistrosNoDisco() < 0) return -19;
@@ -509,6 +520,10 @@ int rmdir2 (char *pathname) {
 	//Tem que apagar todos os filhos recursivamente
 
 	int indice_encontrado =ApagaRegistroPeloNome(pathname,ARQUIVO_DIRETORIO);
+
+	if (indice_encontrado < 0)
+		return -1;
+
 
 	//Remove do pai
 	int index_pai = PegaIndexDoDiretorioAtual();
@@ -666,7 +681,7 @@ void CriaRegistroDiretorioRoot()
     strncpy(lista_registros[index_registros].pathName,"/",MAX_FILE_NAME_SIZE - 1);
     lista_registros[index_registros].fileType = ARQUIVO_DIRETORIO;
     lista_registros[index_registros].fileSize = 0;
-    lista_registros[index_registros].blocoInicial = -1;
+    lista_registros[index_registros].blocoInicial = SETOR_INICIO_ESCRITA + index_registros;
     lista_registros[index_registros].numeroDeBlocos = 1;
     
 
@@ -1227,4 +1242,5 @@ void LimpaOpenFiles()
 	}
 
 }
+
 
